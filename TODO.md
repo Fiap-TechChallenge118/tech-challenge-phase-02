@@ -116,7 +116,7 @@
     4. Squash merge com mensagem semântica
   - **Setup local:** `make setup` (único comando para novos devs)
   - **Padrões de código:** funções ≤ 20 linhas, type hints, sem `print()`, docstrings Google style
-- [ ] Commit: `docs: add CONTRIBUTING.md`
+- [x] Commit: `docs: add CONTRIBUTING.md`
 
 ### 1.3 Dataset
 - [x] ✅ **Dataset definido:** [Instacart Online Grocery Basket Analysis](https://www.kaggle.com/datasets/yasserh/instacart-online-grocery-basket-analysis-dataset)
@@ -149,7 +149,7 @@
 
 ### 1.6 Qualidade de Código
 - [x] Configurar `ruff` no `pyproject.toml` (target Python 3.11, regras E/F/W/I/N)
-- [ ] Criar `.pre-commit-config.yaml`:
+- [x] Criar `.pre-commit-config.yaml`:
   ```yaml
   repos:
     - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -160,7 +160,7 @@
         - id: ruff-format
   ```
 - [x] Rodar `ruff check .` → corrigir até zero erros
-- [ ] Commit: `chore: configure ruff and pre-commit hooks`
+- [x] Commit: `chore: configure ruff and pre-commit hooks`
 
 ---
 

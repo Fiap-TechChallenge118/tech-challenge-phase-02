@@ -91,7 +91,7 @@
 - [ ] Commit: `chore: initial project structure`
 
 ### 1.2 CONTRIBUTING.md
-- [ ] Criar `CONTRIBUTING.md` com seções:
+- [x] Criar `CONTRIBUTING.md` com seções:
   - **Fluxo de branches:**
     ```
     main        → branch protegida, só merge via PR aprovado

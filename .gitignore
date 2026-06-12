@@ -1,0 +1,127 @@
+# =============================================================================
+# ARQUIVOS PESSOAIS
+# =============================================================================
+
+# Arquivos de configuração pessoal — cada dev tem o seu, não devem ser compartilhados
+*.local
+*.personal
+*.secret
+.kiro
+.docs
+
+
+# =============================================================================
+# PYTHON
+# =============================================================================
+
+# Bytecode compilado — gerado automaticamente pelo interpretador
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribuição e empacotamento
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Ambientes virtuais — cada dev tem o seu localmente
+.venv/
+venv/
+env/
+
+# Cache do uv
+.uv/
+
+# =============================================================================
+# DADOS
+# =============================================================================
+
+# Arquivos brutos do dataset — grandes demais para o git, versionados via DVC
+data/raw/
+
+# Dados processados — artefatos gerados pelo pipeline DVC, não devem ser commitados
+data/processed/
+
+# =============================================================================
+# MODELOS E ARTEFATOS ML
+# =============================================================================
+
+# Pesos do modelo PyTorch — artefatos grandes, gerenciados pelo MLflow/DVC
+*.pth
+*.pt
+
+# Modelos serializados do Scikit-Learn
+*.pkl
+*.joblib
+
+# =============================================================================
+# MLFLOW
+# =============================================================================
+
+# Diretório local de runs do MLflow — gerado em tempo de execução
+mlruns/
+mlartifacts/
+
+# =============================================================================
+# DVC
+# =============================================================================
+
+# Cache local do DVC — dados cacheados localmente, não pertencem ao repositório
+.dvc/cache/
+.dvc/tmp/
+
+# =============================================================================
+# DOCKER
+# =============================================================================
+
+# Contexto de build temporário do Docker
+.dockerignore.bak
+
+# =============================================================================
+# SEGREDOS E CONFIGURAÇÕES LOCAIS
+# =============================================================================
+
+# Variáveis de ambiente com segredos reais — NUNCA commitar
+.env
+
+# Apenas o .env.example deve ir para o repositório
+# .env.example  ← NÃO ignorado intencionalmente
+
+# =============================================================================
+# INFRAESTRUTURA (TERRAFORM)
+# =============================================================================
+
+# Diretório de plugins e providers do Terraform — baixados automaticamente
+.terraform/
+.terraform.lock.hcl
+
+# State files — contêm o estado real da infraestrutura, podem conter segredos
+*.tfstate
+*.tfstate.backup
+
+# Arquivo de variáveis reais — use terraform.tfvars.example como template
+terraform.tfvars
+
+# =============================================================================
+# IDEs E EDITORES
+# =============================================================================
+
+# VSCode — configurações pessoais de workspace
+.vscode/
+
+# JetBrains (PyCharm, DataSpell)
+.idea/
+
+# Jupyter — checkpoints automáticos criados ao salvar notebooks
+.ipynb_checkpoints/
+
+# =============================================================================
+# SISTEMA OPERACIONAL
+# =============================================================================
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

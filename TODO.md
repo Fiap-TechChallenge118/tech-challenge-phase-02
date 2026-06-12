@@ -148,7 +148,7 @@
 - [ ] Garantir funções ≤ 20 linhas
 
 ### 1.6 Qualidade de Código
-- [ ] Configurar `ruff` no `pyproject.toml` (target Python 3.11, regras E/F/W/I/N)
+- [x] Configurar `ruff` no `pyproject.toml` (target Python 3.11, regras E/F/W/I/N)
 - [ ] Criar `.pre-commit-config.yaml`:
   ```yaml
   repos:
@@ -159,7 +159,7 @@
           args: [--fix]
         - id: ruff-format
   ```
-- [ ] Rodar `ruff check .` → corrigir até zero erros
+- [x] Rodar `ruff check .` → corrigir até zero erros
 - [ ] Commit: `chore: configure ruff and pre-commit hooks`
 
 ---
@@ -167,13 +167,13 @@
 ## ETAPA 2 — Ambiente e Dependências
 
 ### 2.1 uv e pyproject.toml
-- [ ] Instalar uv: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- [ ] Inicializar projeto: `uv init --no-workspace` (ou criar `pyproject.toml` manualmente)
+- [x] Instalar uv: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- [x] Inicializar projeto: `uv init --no-workspace` (ou criar `pyproject.toml` manualmente)
 - [ ] Adicionar dependências de produção:
   ```bash
   uv add torch scikit-learn mlflow dvc pandas numpy pydantic pydantic-settings python-dotenv
   ```
-- [ ] Adicionar dependências de desenvolvimento:
+- [x] Adicionar dependências de desenvolvimento:
   ```bash
   uv add --group dev pytest ruff pre-commit ipykernel
   ```
@@ -186,7 +186,7 @@
   docker-logs   = "scripts.docker_logs:main"
   validate-env  = "scripts.validate_env:main"
   ```
-- [ ] Verificar que `uv.lock` foi gerado
+- [x] Verificar que `uv.lock` foi gerado
 - [ ] Commitar lock file: `git add uv.lock && git commit -m "chore: add uv lock file"`
 
 ### 2.2 Configurações com Pydantic Settings

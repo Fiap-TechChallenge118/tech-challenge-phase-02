@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Tech Challenge 02 — Sistema de recomendação de produtos baseado em redes neurais (MLP/Embedding) com pipeline MLOps end-to-end."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "dvc>=3.67.1",
+]
 
 [dependency-groups]
 dev = [

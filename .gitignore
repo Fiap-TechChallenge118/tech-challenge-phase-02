@@ -30,9 +30,11 @@ build/
 venv/
 env/
 
-# Cache do uv
+# Cache do uv — o diretório de cache não vai para o repo
 .uv/
-uv.lock
+
+# uv.lock é MANTIDO no repositório para reproducibilidade (não ignorar)
+# uv.lock
 
 # Ruff Cache
 .ruff_cache/
@@ -129,3 +131,7 @@ terraform.tfvars
 
 # Windows
 Thumbs.db
+
+
+# UV
+uv.lock

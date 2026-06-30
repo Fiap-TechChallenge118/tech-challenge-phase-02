@@ -202,7 +202,7 @@ O modelo é avaliado com métricas orientadas a ranking:
 | Tamanho de função | ≤ 20 linhas |
 | Tipagem | Type hints em todas as funções públicas |
 | Logging | Proibido `print()` — usar módulo `logging` |
-| Documentação | Docstrings Google style em todas as funções públicas |
+| Documentação | Docstrings Google style **em português** em todas as funções públicas |
 | Linting | `ruff check .` com zero erros antes de abrir PR |
 
 ---

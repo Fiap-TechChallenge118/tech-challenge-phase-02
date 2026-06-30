@@ -248,6 +248,52 @@ dvc pull
 make validate
 ```
 
+O script `scripts/validate_env.py` executa 5 verificações em sequência e encerra com código de saída específico para cada tipo de falha:
+
+| Etapa | O que verifica | Código de saída em caso de falha |
+|-------|---------------|----------------------------------|
+| 1 — Versão do Python | Python ≥ 3.12 | `1` |
+| 2 — Variáveis de ambiente | Todas as vars obrigatórias presentes | `2` |
+| 3 — Imports críticos | torch, sklearn, mlflow, pandas, numpy, pydantic, pandera, yaml, joblib | `3` |
+| 4 — Settings Pydantic | Todos os campos do `.env` são válidos | `4` |
+| 5 — Diretórios | `data/`, `configs/`, `models/`, `metrics/` existem | aviso (não erro) |
+
+**Saída esperada em ambiente configurado:**
+
+```
+INFO  ============================================================
+INFO  Validação do Ambiente — Tech Challenge 02
+INFO  ============================================================
+
+[1/5] Versão do Python
+INFO    ✓ Python 3.12 (≥ 3.12)
+
+[2/5] Variáveis de ambiente obrigatórias
+INFO    ✓ Arquivo .env encontrado
+INFO    ✓ PROJECT_NAME definida
+INFO    ✓ MLFLOW_TRACKING_URI definida
+...
+
+[3/5] Imports críticos
+INFO    ✓ PyTorch importado com sucesso (v2.x)
+INFO    ✓ MLflow importado com sucesso (v2.x)
+...
+
+[4/5] Validação do Settings (Pydantic)
+INFO    ✓ Settings válido — projeto 'tech-challenge-02' | env 'development' | seed 42
+
+[5/5] Diretórios do projeto
+INFO    ✓ configs/ existe
+WARNING ⚠ data/raw não encontrado (rode dvc pull)
+...
+
+INFO  ✓ Ambiente validado com sucesso! (N avisos, 0 erros)
+```
+
+Se o script encerrar com erro, a mensagem indica exatamente o que falta corrigir antes de continuar.
+
+> Avisos em `[5/5]` sobre `data/` são esperados antes do `dvc pull` e não bloqueiam o ambiente.
+
 ### 4. Reproduzir o pipeline completo
 
 ```bash

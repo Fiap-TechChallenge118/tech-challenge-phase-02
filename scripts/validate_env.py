@@ -16,21 +16,99 @@ Códigos de saída:
 """
 
 import importlib
-import logging
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 # * ---------------------------------------------------------------------------
-# * Configuração de logging
+# * Cores ANSI — funcionam em qualquer terminal moderno
 # * ---------------------------------------------------------------------------
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s  %(message)s",
-)
+_RESET = "\033[0m"
+_BOLD = "\033[1m"
+_DIM = "\033[2m"
 
-_log = logging.getLogger(__name__)
+_GREEN = "\033[32m"
+_YELLOW = "\033[33m"
+_RED = "\033[31m"
+_CYAN = "\033[36m"
+_WHITE = "\033[37m"
+_BLUE = "\033[34m"
+_MAGENTA = "\033[35m"
+
+# * Ícones e prefixos visuais
+_OK = f"{_GREEN}✓{_RESET}"
+_WARN = f"{_YELLOW}⚠{_RESET}"
+_FAIL = f"{_RED}✗{_RESET}"
+_ARROW = f"{_DIM}→{_RESET}"
+
+
+def _c(text: str, color: str, bold: bool = False) -> str:
+    """Aplica cor e opcionalmente negrito a um texto para o terminal.
+
+    Args:
+        text: Texto a ser colorido.
+        color: Código ANSI de cor.
+        bold: Se True, aplica negrito além da cor.
+
+    Returns:
+        Texto com as sequências ANSI aplicadas.
+    """
+    prefix = _BOLD if bold else ""
+    return f"{prefix}{color}{text}{_RESET}"
+
+
+def _print_header(title: str) -> None:
+    """Imprime um cabeçalho de seção com separadores visuais.
+
+    Args:
+        title: Título da seção.
+    """
+    line = "─" * 60
+    print(f"\n{_c(line, _CYAN)}")
+    print(f"  {_c(title, _WHITE, bold=True)}")
+    print(f"{_c(line, _CYAN)}")
+
+
+def _print_step(number: int, total: int, description: str) -> None:
+    """Imprime o cabeçalho de uma etapa de validação.
+
+    Args:
+        number: Número da etapa atual.
+        total: Total de etapas.
+        description: Descrição da etapa.
+    """
+    step = _c(f"[{number}/{total}]", _CYAN, bold=True)
+    desc = _c(description, _WHITE, bold=True)
+    print(f"\n  {step} {desc}")
+
+
+def _print_ok(message: str) -> None:
+    """Imprime uma linha de verificação bem-sucedida.
+
+    Args:
+        message: Descrição do item verificado com sucesso.
+    """
+    print(f"      {_OK}  {message}")
+
+
+def _print_warn(message: str) -> None:
+    """Imprime um aviso que não bloqueia a execução.
+
+    Args:
+        message: Descrição do aviso.
+    """
+    print(f"      {_WARN}  {_c(message, _YELLOW)}")
+
+
+def _print_fail(message: str) -> None:
+    """Imprime um erro crítico que impede a execução.
+
+    Args:
+        message: Descrição do erro.
+    """
+    print(f"      {_FAIL}  {_c(message, _RED)}")
+
 
 # * ---------------------------------------------------------------------------
 # * Constantes
@@ -39,7 +117,7 @@ _log = logging.getLogger(__name__)
 # * Versão mínima exigida pelo projeto (pyproject.toml: requires-python = ">=3.12")
 _PYTHON_MIN = (3, 12)
 
-# * Variáveis obrigatórias: sem valor padrão útil em produção
+# * Variáveis obrigatórias sem valor padrão útil em produção
 _REQUIRED_VARS: list[str] = [
     "PROJECT_NAME",
     "ENV",
@@ -54,7 +132,7 @@ _REQUIRED_VARS: list[str] = [
     "DATASET_NAME",
 ]
 
-# * Imports críticos para o pipeline — nome do módulo e rótulo legível
+# * Imports críticos para o pipeline — (módulo, rótulo legível)
 _CRITICAL_IMPORTS: list[tuple[str, str]] = [
     ("torch", "PyTorch"),
     ("sklearn", "Scikit-Learn"),
@@ -89,30 +167,30 @@ class _ValidationResult:
     warnings: list[str] = field(default_factory=list)
 
     def add_error(self, msg: str) -> None:
-        """Registra um erro crítico que impede a execução.
+        """Registra um erro crítico e imprime no terminal.
 
         Args:
             msg: Descrição do erro.
         """
         self.errors.append(msg)
-        _log.error("  ✗ %s", msg)
+        _print_fail(msg)
 
     def add_warning(self, msg: str) -> None:
-        """Registra um aviso que não impede a execução.
+        """Registra um aviso e imprime no terminal.
 
         Args:
             msg: Descrição do aviso.
         """
         self.warnings.append(msg)
-        _log.warning("  ⚠ %s", msg)
+        _print_warn(msg)
 
     def add_ok(self, msg: str) -> None:
-        """Registra uma verificação bem-sucedida.
+        """Registra uma verificação bem-sucedida e imprime no terminal.
 
         Args:
             msg: Descrição do item verificado.
         """
-        _log.info("  ✓ %s", msg)
+        _print_ok(msg)
 
     @property
     def ok(self) -> bool:
@@ -137,44 +215,48 @@ def _check_python_version(result: _ValidationResult) -> None:
 
     if current < _PYTHON_MIN:
         result.add_error(
-            f"Python {version_str} encontrado — mínimo exigido é {min_str}"
+            f"Python {version_str} encontrado {_ARROW} mínimo exigido é {min_str}"
         )
     else:
-        result.add_ok(f"Python {version_str} (≥ {min_str})")
+        result.add_ok(
+            f"Python {_c(version_str, _GREEN, bold=True)} "
+            f"{_c(f'(≥ {min_str})', _DIM)}"
+        )
 
 
 def _check_env_vars(result: _ValidationResult) -> None:
     """Verifica se todas as variáveis de ambiente obrigatórias estão definidas.
-
-    Lê o arquivo .env diretamente via python-dotenv quando disponível,
-    mas também aceita variáveis já exportadas no processo.
 
     Args:
         result: Objeto de resultado onde erros e avisos serão registrados.
     """
     import os
 
-    # * Tenta carregar o .env para complementar as variáveis do processo
     env_file = Path(".env")
     if env_file.exists():
-        result.add_ok(f"Arquivo .env encontrado em {env_file.resolve()}")
+        result.add_ok(
+            f"Arquivo {_c('.env', _CYAN)} encontrado em "
+            f"{_c(str(env_file.resolve()), _DIM)}"
+        )
     else:
         result.add_warning(
-            "Arquivo .env não encontrado — usando apenas variáveis do processo"
+            f"Arquivo {_c('.env', _CYAN)} não encontrado "
+            f"{_ARROW} usando apenas variáveis do processo"
         )
 
-    # * Verifica cada variável obrigatória
     missing: list[str] = []
     for var in _REQUIRED_VARS:
-        value = os.getenv(var)
-        if not value:
-            missing.append(var)
+        if os.getenv(var):
+            result.add_ok(
+                f"{_c(var, _CYAN)} {_c('definida', _DIM)}"
+            )
         else:
-            result.add_ok(f"{var} definida")
+            missing.append(var)
 
-    if missing:
-        for var in missing:
-            result.add_error(f"Variável obrigatória ausente: {var}")
+    for var in missing:
+        result.add_error(
+            f"{_c(var, _CYAN)} {_ARROW} variável obrigatória ausente"
+        )
 
 
 def _check_imports(result: _ValidationResult) -> None:
@@ -186,11 +268,14 @@ def _check_imports(result: _ValidationResult) -> None:
     for module, label in _CRITICAL_IMPORTS:
         try:
             mod = importlib.import_module(module)
-            version = getattr(mod, "__version__", "versão desconhecida")
-            result.add_ok(f"{label} importado com sucesso (v{version})")
+            version = getattr(mod, "__version__", "?")
+            result.add_ok(
+                f"{_c(label, _WHITE)} "
+                f"{_c(f'v{version}', _DIM)}"
+            )
         except ImportError as exc:
             result.add_error(
-                f"Falha ao importar {label} ({module}): {exc}"
+                f"{_c(label, _WHITE)} {_ARROW} {exc}"
             )
 
 
@@ -201,46 +286,49 @@ def _check_settings(result: _ValidationResult) -> None:
         result: Objeto de resultado onde erros e avisos serão registrados.
     """
     try:
-        # * Adiciona o diretório raiz ao path para importar src
         root = Path(__file__).parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
 
         from src.settings import Settings
 
-        settings = Settings()
+        s = Settings()
         result.add_ok(
-            f"Settings válido — projeto '{settings.project_name}' "
-            f"| env '{settings.env}' | seed {settings.random_seed}"
+            f"Settings válido {_ARROW} "
+            f"projeto {_c(repr(s.project_name), _CYAN)}  "
+            f"env {_c(repr(s.env), _CYAN)}  "
+            f"seed {_c(str(s.random_seed), _CYAN)}"
         )
     except ImportError as exc:
-        result.add_error(f"Falha ao importar src.settings: {exc}")
+        result.add_error(f"Falha ao importar src.settings {_ARROW} {exc}")
     except Exception as exc:  # noqa: BLE001
-        result.add_error(f"Settings inválido: {exc}")
+        result.add_error(f"Settings inválido {_ARROW} {exc}")
 
 
 def _check_data_dirs(result: _ValidationResult) -> None:
-    """Verifica se os diretórios de dados existem.
+    """Verifica se os diretórios do projeto existem.
 
     Args:
         result: Objeto de resultado onde erros e avisos serão registrados.
     """
-    dirs_to_check = [
-        (Path("data"), "Diretório raiz de dados"),
-        (Path("data/raw"), "Dados brutos (data/raw)"),
-        (Path("data/processed"), "Dados processados (data/processed)"),
-        (Path("configs"), "Configurações (configs/)"),
-        (Path("models"), "Artefatos de modelos (models/)"),
-        (Path("metrics"), "Métricas do pipeline (metrics/)"),
+    dirs_to_check: list[tuple[Path, str]] = [
+        (Path("data"),           "data/"),
+        (Path("data/raw"),       "data/raw/"),
+        (Path("data/processed"), "data/processed/"),
+        (Path("configs"),        "configs/"),
+        (Path("models"),         "models/"),
+        (Path("metrics"),        "metrics/"),
     ]
 
     for path, label in dirs_to_check:
         if path.exists():
-            result.add_ok(f"{label} existe")
+            result.add_ok(f"{_c(label, _CYAN)} existe")
         else:
-            # ! Diretórios de dados ausentes são avisos, não erros —
-            # ! podem ser criados pelo pipeline ou pelo DVC pull
-            result.add_warning(f"{label} não encontrado: {path}")
+            # ! Ausência de data/ é esperada antes do dvc pull — não é erro crítico
+            result.add_warning(
+                f"{_c(label, _CYAN)} não encontrado "
+                f"{_c('(rode dvc pull)', _DIM)}"
+            )
 
 
 # * ---------------------------------------------------------------------------
@@ -252,63 +340,89 @@ def main() -> None:
     """Executa todas as validações e encerra com o código de saída adequado."""
     result = _ValidationResult()
 
-    _log.info("=" * 60)
-    _log.info("Validação do Ambiente — Tech Challenge 02")
-    _log.info("=" * 60)
+    # * Cabeçalho principal
+    print(f"\n{_c('═' * 62, _CYAN)}")
+    print(
+        f"  {_c('🔍 Validação do Ambiente', _WHITE, bold=True)}"
+        f"  {_c('Tech Challenge 02', _DIM)}"
+    )
+    print(f"{_c('═' * 62, _CYAN)}")
+
+    total_steps = 5
 
     # * 1 — Versão do Python
-    _log.info("\n[1/5] Versão do Python")
+    _print_step(1, total_steps, "Versão do Python")
     _check_python_version(result)
     if not result.ok:
-        _log.error("\n✗ Versão do Python incompatível. Abortando.")
+        _print_summary(result)
         sys.exit(_EXIT_PYTHON_VERSION)
 
-    # * 2 — Variáveis de ambiente obrigatórias
-    _log.info("\n[2/5] Variáveis de ambiente obrigatórias")
+    # * 2 — Variáveis de ambiente
+    _print_step(2, total_steps, "Variáveis de ambiente obrigatórias")
     _check_env_vars(result)
 
     # * 3 — Imports críticos
-    _log.info("\n[3/5] Imports críticos")
+    _print_step(3, total_steps, "Imports críticos")
     _check_imports(result)
 
-    # * 4 — Settings (validação Pydantic)
-    _log.info("\n[4/5] Validação do Settings (Pydantic)")
+    # * 4 — Settings Pydantic
+    _print_step(4, total_steps, "Validação do Settings (Pydantic)")
     _check_settings(result)
 
-    # * 5 — Diretórios de dados
-    _log.info("\n[5/5] Diretórios do projeto")
+    # * 5 — Diretórios do projeto
+    _print_step(5, total_steps, "Diretórios do projeto")
     _check_data_dirs(result)
 
-    # * Resumo final
-    _log.info("\n" + "=" * 60)
-
-    if result.warnings:
-        _log.warning("Avisos (%d):", len(result.warnings))
-        for w in result.warnings:
-            _log.warning("  ⚠ %s", w)
+    # * Rodapé com resumo
+    _print_summary(result)
 
     if not result.ok:
-        _log.error("Falhas críticas (%d):", len(result.errors))
-        for e in result.errors:
-            _log.error("  ✗ %s", e)
-        _log.error("\n✗ Validação falhou. Corrija os erros acima antes de continuar.")
-
-        # * Determina o código de saída mais específico
         error_text = " ".join(result.errors)
         if "Python" in error_text:
             sys.exit(_EXIT_PYTHON_VERSION)
         if "ausente" in error_text:
             sys.exit(_EXIT_MISSING_VARS)
-        if "importar" in error_text.lower():
+        if "importar" in error_text.lower() or "import" in error_text.lower():
             sys.exit(_EXIT_IMPORT_ERROR)
         sys.exit(_EXIT_SETTINGS_ERROR)
 
-    _log.info(
-        "✓ Ambiente validado com sucesso! "
-        "(%d avisos, 0 erros)",
-        len(result.warnings),
-    )
     sys.exit(_EXIT_OK)
+
+
+def _print_summary(result: _ValidationResult) -> None:
+    """Imprime o resumo final com contagem de erros e avisos.
+
+    Args:
+        result: Resultado acumulado de todas as etapas.
+    """
+    print(f"\n{_c('─' * 62, _CYAN)}")
+
+    if result.warnings:
+        label = _c(f"⚠  {len(result.warnings)} aviso(s)", _YELLOW, bold=True)
+        print(f"\n  {label}")
+        for w in result.warnings:
+            print(f"     {_WARN}  {_c(w, _YELLOW)}")
+
+    if not result.ok:
+        label = _c(f"✗  {len(result.errors)} erro(s) crítico(s)", _RED, bold=True)
+        print(f"\n  {label}")
+        for e in result.errors:
+            print(f"     {_FAIL}  {_c(e, _RED)}")
+        print(
+            f"\n  {_c('Corrija os erros acima antes de continuar.', _RED)}\n"
+        )
+    else:
+        n_warn = len(result.warnings)
+        warn_label = (
+            f"{_c(str(n_warn), _YELLOW)} aviso(s)" if n_warn else
+            f"{_c('0', _GREEN)} avisos"
+        )
+        print(
+            f"\n  {_c('✓  Ambiente validado com sucesso!', _GREEN, bold=True)}"
+            f"  {_c(f'({warn_label}, 0 erros)', _DIM)}"
+        )
+
+    print(f"{_c('─' * 62, _CYAN)}\n")
 
 
 if __name__ == "__main__":

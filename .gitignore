@@ -8,7 +8,7 @@
 *.secret
 .kiro
 .docs
-
+.pdf
 
 # =============================================================================
 # PYTHON
@@ -44,6 +44,7 @@ env/
 # =============================================================================
 
 # Arquivos brutos do dataset — grandes demais para o git, versionados via DVC
+src/data/raw/
 data/raw/
 
 # Dados processados — artefatos gerados pelo pipeline DVC, não devem ser commitados

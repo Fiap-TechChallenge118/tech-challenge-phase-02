@@ -22,7 +22,9 @@ Uso::
 """
 
 import argparse
+import copy
 import logging
+import os
 import random
 import time
 from pathlib import Path
@@ -99,7 +101,10 @@ def _split_train_val_test(
 
 
 def _set_seeds(seed: int) -> None:
-    """Fixa as sementes de PyTorch, NumPy e Python para reprodutibilidade.
+    """Fixa todas as sementes para reprodutibilidade determinística.
+
+    Cobre PyTorch (CPU e CUDA), NumPy, Python e hash de strings.
+    Deve ser chamada antes de qualquer operação aleatória.
 
     Args:
         seed: Valor inteiro da semente.
@@ -107,6 +112,13 @@ def _set_seeds(seed: int) -> None:
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def _load_config(path: Path) -> dict:
@@ -129,10 +141,12 @@ def train(
     epochs: int,
     lr: float,
     weight_decay: float,
+    patience: int,
+    min_delta: float,
     pos_weight: torch.Tensor | None,
     device: torch.device,
-) -> tuple[torch.nn.Module, list[float], list[float]]:
-    """Executa o loop de treino com validação por época.
+) -> tuple[torch.nn.Module, list[float], list[float], int, bool]:
+    """Executa o loop de treino com early stopping.
 
     Args:
         model: Modelo PyTorch a ser treinado.
@@ -141,11 +155,14 @@ def train(
         epochs: Número máximo de épocas.
         lr: Taxa de aprendizado inicial do optimizer.
         weight_decay: Fator de regularização L2.
+        patience: Épocas sem melhora na val_loss antes de parar.
+        min_delta: Melhora mínima da val_loss para considerar progresso.
         pos_weight: Peso da classe positiva para BCEWithLogitsLoss.
         device: Dispositivo onde o treino será executado.
 
     Returns:
-        Tupla ``(modelo_treinado, train_losses, val_losses)``.
+        Tupla ``(modelo, train_losses, val_losses, best_epoch, early_stopped)``.
+        O modelo retornado é o de melhor val_loss (restaurado do checkpoint).
     """
     model.to(device)
     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
@@ -153,6 +170,10 @@ def train(
 
     train_losses: list[float] = []
     val_losses: list[float] = []
+    best_val = float("inf")
+    best_state = copy.deepcopy(model.state_dict())
+    best_epoch = 0
+    stale = 0
 
     for epoch in range(1, epochs + 1):
         t0 = time.perf_counter()
@@ -182,16 +203,39 @@ def train(
         val_losses.append(avg_val)
 
         epoch_time = time.perf_counter() - t0
+        improved = ""
+        if avg_val < best_val - min_delta:
+            best_val = avg_val
+            best_state = copy.deepcopy(model.state_dict())
+            best_epoch = epoch
+            stale = 0
+            improved = " *"
+        else:
+            stale += 1
+
         logger.info(
-            "Época %3d/%d | train_loss: %.4f | val_loss: %.4f | %.1fs",
+            "Época %3d/%d | train_loss: %.4f | val_loss: %.4f | %.1fs%s",
             epoch,
             epochs,
             avg_train,
             avg_val,
             epoch_time,
+            improved,
         )
 
-    return model, train_losses, val_losses
+        if stale >= patience:
+            logger.info(
+                "Early stopping: val_loss sem melhora por %d épocas. "
+                "Melhor: época %d (val_loss=%.4f).",
+                patience,
+                best_epoch,
+                best_val,
+            )
+            break
+
+    early_stopped = stale >= patience
+    model.load_state_dict(best_state)
+    return model, train_losses, val_losses, best_epoch, early_stopped
 
 
 def _build_dataloaders(
@@ -339,18 +383,27 @@ def main() -> None:
     )
 
     t0 = time.perf_counter()
-    model, train_losses, val_losses = train(
+    patience = train_cfg.get("patience", 5)
+    min_delta = train_cfg.get("min_delta", 1e-4)
+    model, train_losses, val_losses, best_epoch, early_stopped = train(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         epochs=epochs,
         lr=train_cfg["learning_rate"],
         weight_decay=train_cfg["weight_decay"],
+        patience=patience,
+        min_delta=min_delta,
         pos_weight=pos_weight_tensor,
         device=device,
     )
     elapsed = time.perf_counter() - t0
-    logger.info("Treino concluído em %.1f min (%d épocas)", elapsed / 60, epochs)
+    logger.info(
+        "Treino concluído em %.1f min (%d épocas, best=%d)",
+        elapsed / 60,
+        len(train_losses),
+        best_epoch,
+    )
 
     # ---- Salvamento -------------------------------------------------------
     models_dir = Path("models")
@@ -366,6 +419,8 @@ def main() -> None:
         "seed": settings.random_seed,
         "train_losses": train_losses,
         "val_losses": val_losses,
+        "best_epoch": best_epoch,
+        "early_stopped": early_stopped,
     }
     torch.save(checkpoint, models_dir / "model.pt")
     logger.info("Checkpoint salvo em models/model.pt")

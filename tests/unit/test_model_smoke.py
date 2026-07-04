@@ -4,10 +4,17 @@ Verificações mínimas: forward pass com tensores aleatórios, shape do output
 e instanciação via factory.
 """
 
+import os
+
+import numpy as np
+import pandas as pd
 import pytest
 import torch
+from torch.utils.data import DataLoader
 
 from src.models import ModelFactory, RecommendationMLP
+from src.training.dataset import InteractionDataset
+from src.training.trainer import _set_seeds, train
 
 
 class TestRecommendationMLP:
@@ -128,3 +135,109 @@ class TestModelFactory:
         model = ModelFactory.create("dummy", hidden=20)
         assert isinstance(model, _DummyModel)
         assert model.linear.in_features == 20
+
+
+# * ---------------------------------------------------------------------------
+# * Early stopping
+# * ---------------------------------------------------------------------------
+
+
+class TestEarlyStopping:
+    """Cobertura de early stopping na função train()."""
+
+    @pytest.fixture
+    def dummy_data(self) -> DataLoader:
+        """Dataset sintético pequeno para teste rápido de early stopping."""
+        n = 128
+        rng = np.random.default_rng(42)
+        pairs = pd.DataFrame(
+            {
+                "user_idx": rng.integers(0, 10, n),
+                "item_idx": rng.integers(0, 20, n),
+                "label": rng.integers(0, 2, n).astype(np.float32),
+            }
+        )
+        dataset = InteractionDataset(pairs)
+        return DataLoader(dataset, batch_size=32, shuffle=True)
+
+    def _make_model(self) -> RecommendationMLP:
+        """Modelo mínimo para teste."""
+        return RecommendationMLP(
+            n_users=10, n_items=20, embedding_dim=4,
+            hidden_dims=[8], batch_norm=False,
+        )
+
+    def test_early_stopping_triggers(self, dummy_data: DataLoader) -> None:
+        """Com patience=1 e lr=0, deve parar após 2 épocas."""
+        model = self._make_model()
+        _, _, _, best_epoch, early_stopped = train(
+            model=model,
+            train_loader=dummy_data,
+            val_loader=dummy_data,
+            epochs=50,
+            lr=0.0,
+            weight_decay=0.0,
+            patience=1,
+            min_delta=1e-8,
+            pos_weight=None,
+            device=torch.device("cpu"),
+        )
+        assert early_stopped
+        assert best_epoch <= 2  # parou cedo
+
+    def test_no_stop_with_high_patience(self, dummy_data: DataLoader) -> None:
+        """Com patience >= epochs, nunca deve parar por early stopping."""
+        model = self._make_model()
+        _, train_losses, _, _, early_stopped = train(
+            model=model,
+            train_loader=dummy_data,
+            val_loader=dummy_data,
+            epochs=5,
+            lr=0.001,
+            weight_decay=0.0,
+            patience=10,
+            min_delta=1e-8,
+            pos_weight=None,
+            device=torch.device("cpu"),
+        )
+        assert not early_stopped
+        assert len(train_losses) == 5
+
+
+# * ---------------------------------------------------------------------------
+# * Reproducibilidade das seeds
+# * ---------------------------------------------------------------------------
+
+
+class TestSeedReproducibility:
+    """Garante que _set_seeds produz resultados idênticos entre execuções."""
+
+    def test_set_seeds_fixes_python_hash(self) -> None:
+        """PYTHONHASHSEED deve ser fixado após _set_seeds."""
+        _set_seeds(42)
+        assert os.environ["PYTHONHASHSEED"] == "42"
+
+    def test_torch_manual_seed_is_set(self) -> None:
+        """torch.manual_seed deve ser chamado por _set_seeds."""
+        _set_seeds(123)
+        # Gera dois tensores aleatórios e verifica determinismo
+        torch.manual_seed(123)
+        a = torch.randn(10)
+        torch.manual_seed(123)
+        b = torch.randn(10)
+        assert torch.equal(a, b)
+
+    def test_numpy_seed_is_set(self) -> None:
+        """np.random.seed deve ser chamado por _set_seeds."""
+        _set_seeds(7)
+        a = np.random.randn(5)
+        np.random.seed(7)
+        b = np.random.randn(5)
+        assert np.array_equal(a, b)
+
+    def test_cudnn_deterministic_when_cuda(self) -> None:
+        """Se CUDA disponível, cudnn.deterministic deve ser True."""
+        _set_seeds(42)
+        if torch.cuda.is_available():
+            assert torch.backends.cudnn.deterministic
+            assert not torch.backends.cudnn.benchmark

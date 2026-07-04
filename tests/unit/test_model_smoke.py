@@ -34,14 +34,13 @@ class TestRecommendationMLP:
         )
 
     def test_forward_output_shape(self, model: RecommendationMLP) -> None:
-        """O output deve ter shape (batch_size, 1) com valores em [0, 1]."""
+        """O output deve ter shape (batch_size, 1) e valores finitos."""
         batch_size = 16
         user_idx = torch.randint(0, 100, (batch_size,))
         item_idx = torch.randint(0, 500, (batch_size,))
         output = model(user_idx, item_idx)
         assert output.shape == (batch_size, 1)
-        assert output.min() >= 0.0
-        assert output.max() <= 1.0
+        assert torch.isfinite(output).all()
 
     def test_forward_different_batch_sizes(self, model: RecommendationMLP) -> None:
         """A MLP deve aceitar batches de tamanhos variados."""

@@ -115,10 +115,10 @@ class RecommendationMLP(nn.Module):
             item_idx: Tensor de índices de item com shape ``(batch_size,)``.
 
         Returns:
-            Score de relevância no intervalo ``[0, 1]`` com shape
-            ``(batch_size, 1)``.
+            Logits (score bruto) com shape ``(batch_size, 1)``.
+            Use ``torch.sigmoid`` para converter em probabilidade.
         """
         user_emb = self.user_embedding(user_idx)
         item_emb = self.item_embedding(item_idx)
         combined = torch.cat([user_emb, item_emb], dim=-1)
-        return torch.sigmoid(self.mlp(combined))
+        return self.mlp(combined)

@@ -7,7 +7,8 @@ Módulo executável que orquestra o treino ponta a ponta:
 3. Divide em treino (80%) / validação (10%) / teste (10%)
 4. Instancia ``RecommendationMLP`` via ``ModelFactory``
 5. Treina com ``BCEWithLogitsLoss`` + ``Adam``
-6. Salva checkpoint + test set para avaliação futura
+6. Loga parâmetros, métricas e artefatos no MLflow Tracking
+7. Salva checkpoint + test set para avaliação futura
 
 Uso::
 
@@ -29,6 +30,7 @@ import random
 import time
 from pathlib import Path
 
+import mlflow
 import numpy as np
 import pandas as pd
 import torch
@@ -213,6 +215,16 @@ def train(
         else:
             stale += 1
 
+        # MLflow: loga métricas por época
+        mlflow.log_metrics(
+            {
+                "train_loss": avg_train,
+                "val_loss": avg_val,
+                "epoch_time_s": epoch_time,
+            },
+            step=epoch,
+        )
+
         logger.info(
             "Época %3d/%d | train_loss: %.4f | val_loss: %.4f | %.1fs%s",
             epoch,
@@ -305,6 +317,22 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Dispositivo: %s | Seed: %d", device, settings.random_seed)
 
+    # ---- MLflow setup -----------------------------------------------------
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    mlflow.set_experiment(settings.mlflow_experiment_name)
+    # Garante que não há run ativo residual
+    while mlflow.active_run():
+        mlflow.end_run()
+
+    if settings.mlflow_tracking_username and settings.mlflow_tracking_password:
+        logger.info("MLflow: autenticação básica configurada.")
+
+    logger.info(
+        "MLflow: tracking_uri=%s | experiment=%s",
+        settings.mlflow_tracking_uri,
+        settings.mlflow_experiment_name,
+    )
+
     # ---- Pré-processamento ------------------------------------------------
     frames = _load_frames(Path(settings.data_raw_dir))
     strategy = InteractionPairsStrategy(seed=settings.random_seed)
@@ -376,57 +404,121 @@ def main() -> None:
         total_params,
     )
 
-    # ---- Treino -----------------------------------------------------------
+    # ---- Treino (com MLflow tracking) -------------------------------------
     pos_weight = train_cfg.get("pos_weight")
     pos_weight_tensor = (
         torch.tensor([pos_weight], device=device) if pos_weight else None
     )
 
-    t0 = time.perf_counter()
-    patience = train_cfg.get("patience", 5)
-    min_delta = train_cfg.get("min_delta", 1e-4)
-    model, train_losses, val_losses, best_epoch, early_stopped = train(
-        model=model,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        epochs=epochs,
-        lr=train_cfg["learning_rate"],
-        weight_decay=train_cfg["weight_decay"],
-        patience=patience,
-        min_delta=min_delta,
-        pos_weight=pos_weight_tensor,
-        device=device,
-    )
-    elapsed = time.perf_counter() - t0
-    logger.info(
-        "Treino concluído em %.1f min (%d épocas, best=%d)",
-        elapsed / 60,
-        len(train_losses),
-        best_epoch,
-    )
+    with mlflow.start_run() as run:
+        run_id = run.info.run_id
+        logger.info("MLflow run: %s", run_id)
 
-    # ---- Salvamento -------------------------------------------------------
-    models_dir = Path("models")
-    models_dir.mkdir(exist_ok=True)
-    checkpoint = {
-        "model_state_dict": model.state_dict(),
-        "n_users": len(strategy.user_to_idx),
-        "n_items": len(strategy.item_to_idx),
-        "embedding_dim": model_cfg.get("embedding_dim", 64),
-        "hidden_dims": hidden_dims,
-        "user_to_idx": strategy.user_to_idx,
-        "item_to_idx": strategy.item_to_idx,
-        "seed": settings.random_seed,
-        "train_losses": train_losses,
-        "val_losses": val_losses,
-        "best_epoch": best_epoch,
-        "early_stopped": early_stopped,
-    }
-    torch.save(checkpoint, models_dir / "model.pt")
-    logger.info("Checkpoint salvo em models/model.pt")
-    logger.info(
-        "Loss final — train: %.4f | val: %.4f", train_losses[-1], val_losses[-1]
-    )
+        # Tags do config.yaml
+        mlflow_tags = cfg.get("mlflow", {}).get("tags", {})
+        mlflow.set_tags(mlflow_tags)
+
+        # Loga parâmetros do modelo e treino
+        mlflow.log_params({
+            "model_type": model_cfg["type"],
+            "n_users": len(strategy.user_to_idx),
+            "n_items": len(strategy.item_to_idx),
+            "embedding_dim": model_cfg.get("embedding_dim", 64),
+            "hidden_dims": str(hidden_dims),
+            "dropout": model_cfg.get("dropout", 0.3),
+            "activation": model_cfg.get("activation", "relu"),
+            "batch_norm": model_cfg.get("batch_norm", True),
+            "total_params": total_params,
+            "learning_rate": train_cfg["learning_rate"],
+            "weight_decay": train_cfg["weight_decay"],
+            "batch_size": settings.batch_size,
+            "epochs": epochs,
+            "patience": train_cfg.get("patience", 5),
+            "min_delta": train_cfg.get("min_delta", 1e-4),
+            "pos_weight": pos_weight,
+            "data_frac": args.frac,
+            "random_seed": settings.random_seed,
+            "device": str(device),
+        })
+        mlflow.log_param("train_pairs", len(train_idx))
+        mlflow.log_param("val_pairs", len(val_idx))
+
+        t0 = time.perf_counter()
+        patience = train_cfg.get("patience", 5)
+        min_delta = train_cfg.get("min_delta", 1e-4)
+        model, train_losses, val_losses, best_epoch, early_stopped = train(
+            model=model,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            epochs=epochs,
+            lr=train_cfg["learning_rate"],
+            weight_decay=train_cfg["weight_decay"],
+            patience=patience,
+            min_delta=min_delta,
+            pos_weight=pos_weight_tensor,
+            device=device,
+        )
+        elapsed = time.perf_counter() - t0
+
+        # Loga métricas finais
+        mlflow.log_metrics({
+            "best_val_loss": float(val_losses[best_epoch - 1]),
+            "final_train_loss": train_losses[-1],
+            "best_epoch": best_epoch,
+            "total_epochs": len(train_losses),
+            "early_stopped": early_stopped,
+            "training_time_min": elapsed / 60,
+        })
+
+        logger.info(
+            "Treino concluído em %.1f min (%d épocas, best=%d)",
+            elapsed / 60,
+            len(train_losses),
+            best_epoch,
+        )
+
+        # ---- Salvamento ---------------------------------------------------
+        models_dir = Path("models")
+        models_dir.mkdir(exist_ok=True)
+        checkpoint = {
+            "model_state_dict": model.state_dict(),
+            "n_users": len(strategy.user_to_idx),
+            "n_items": len(strategy.item_to_idx),
+            "embedding_dim": model_cfg.get("embedding_dim", 64),
+            "hidden_dims": hidden_dims,
+            "user_to_idx": strategy.user_to_idx,
+            "item_to_idx": strategy.item_to_idx,
+            "seed": settings.random_seed,
+            "train_losses": train_losses,
+            "val_losses": val_losses,
+            "best_epoch": best_epoch,
+            "early_stopped": early_stopped,
+        }
+        torch.save(checkpoint, models_dir / "model.pt")
+        logger.info("Checkpoint salvo em models/model.pt")
+
+        # Loga modelo como artefato no MLflow (para registro futuro)
+        # Usa pickle (torch.save) em vez do pt2 default que exige TensorSpec.
+        sample_user = torch.tensor([0])
+        sample_item = torch.tensor([0])
+        mlflow.pytorch.log_model(
+            model,
+            artifact_path="model",
+            registered_model_name=settings.mlflow_registered_model_name,
+            input_example=(sample_user, sample_item),
+            serialization_format="pickle",
+        )
+        logger.info(
+            "Modelo logado no MLflow: %s (run %s)",
+            settings.mlflow_registered_model_name,
+            run_id,
+        )
+
+        logger.info(
+            "Loss final — train: %.4f | val: %.4f",
+            train_losses[-1],
+            val_losses[-1],
+        )
 
 
 if __name__ == "__main__":

@@ -60,9 +60,9 @@ class TestSettingsDefaults:
         assert settings.random_seed == 42
 
     def test_mlflow_tracking_uri_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """URI padrão do MLflow deve apontar para localhost."""
+        """URI padrão do MLflow deve usar SQLite (Registry sem servidor)."""
         settings = _make({}, monkeypatch)
-        assert settings.mlflow_tracking_uri == "http://localhost:5000"
+        assert settings.mlflow_tracking_uri == "sqlite:///mlflow.db"
 
     def test_hidden_layers_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Camadas ocultas padrão devem ser [256, 128, 64]."""

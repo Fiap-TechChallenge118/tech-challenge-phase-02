@@ -132,7 +132,3 @@ terraform.tfvars
 
 # Windows
 Thumbs.db
-
-
-# UV
-uv.lock

@@ -1,5 +1,6 @@
-target-version = "py311"
+target-version = "py312"
 line-length = 88
+exclude = ["notebooks/"]
 
 [lint]
 select = ["E", "F", "W", "I", "N"]

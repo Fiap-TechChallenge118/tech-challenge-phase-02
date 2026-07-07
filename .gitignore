@@ -8,7 +8,7 @@
 *.secret
 .kiro
 .docs
-
+.pdf
 
 # =============================================================================
 # PYTHON
@@ -30,9 +30,11 @@ build/
 venv/
 env/
 
-# Cache do uv
+# Cache do uv — o diretório de cache não vai para o repo
 .uv/
-uv.lock
+
+# uv.lock é MANTIDO no repositório para reproducibilidade (não ignorar)
+# uv.lock
 
 # Ruff Cache
 .ruff_cache/
@@ -42,7 +44,9 @@ uv.lock
 # =============================================================================
 
 # Arquivos brutos do dataset — grandes demais para o git, versionados via DVC
+src/data/raw/
 data/raw/
+mlflow.db
 
 # Dados processados — artefatos gerados pelo pipeline DVC, não devem ser commitados
 data/processed/

@@ -80,7 +80,7 @@ O target `setup` executa `uv sync`, instala os pre-commit hooks e cria o `.env` 
 | Tamanho de função | No máximo **20 linhas** |
 | Tipagem | **Type hints** em todas as funções públicas |
 | Logging | **Sem `print()`** — use o módulo `logging` |
-| Documentação | **Docstrings Google style** em todas as funções públicas |
+| Documentação | **Docstrings Google style em português** em todas as funções públicas |
 | Linting | `ruff check .` deve retornar **zero erros** antes de abrir PR |
 
 Exemplo de função no padrão exigido:

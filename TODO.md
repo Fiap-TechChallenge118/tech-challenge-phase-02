@@ -345,14 +345,14 @@
 - [ ] Commit: `feat: DVC pipeline with 4 stages`
 
 ### 3.4 MLflow Tracking
-- [ ] Configurar `MLFLOW_TRACKING_URI` no `.env` (ex: `http://localhost:5000`)
-- [ ] No stage `train`: logar com MLflow:
+- [x] Configurar `MLFLOW_TRACKING_URI` no `.env` (ex: `http://localhost:5000`)
+- [x] No stage `train`: logar com MLflow:
   - `mlflow.log_params(config)` — hiperparâmetros
   - `mlflow.log_metric("loss", ..., step=epoch)` — loss por epoch
   - `mlflow.log_metric("precision_at_k", ...)` — métricas finais
   - `mlflow.pytorch.log_model(model, "model")` — artefato do modelo
-- [ ] Garantir ≥ 3 runs distintos com configurações diferentes
-- [ ] Commit: `feat: MLflow tracking integrated into DVC pipeline`
+- [x] Garantir ≥ 3 runs distintos com configurações diferentes
+- [x] Commit: `feat: MLflow tracking integrated into DVC pipeline`
 
 ### 3.5 Docker
 - [ ] Criar `Dockerfile` multi-stage:
@@ -388,19 +388,19 @@
 ## ETAPA 4 — Rede Neural, Registry e Entrega
 
 ### 4.1 Modelo MLP PyTorch
-- [ ] Criar `src/models/mlp.py`:
+- [x] Criar `src/models/mlp.py`:
   - Classe `RecommendationMLP(nn.Module)`:
     - Input: features de usuário + item concatenadas
     - Camadas: `Linear → BatchNorm → ReLU → Dropout` (configurável via `configs/config.yaml`)
     - Output: score de relevância (sigmoid)
   - Método `forward(user_features, item_features) -> Tensor`
-- [ ] Criar `src/models/baselines.py`:
+- [x] Criar `src/models/baselines.py`:
   - `PopularityBaseline`: recomenda itens mais populares
   - `SklearnBaseline`: wrapper para `LogisticRegression` ou `RandomForestClassifier`
-- [ ] Fixar seeds: `torch.manual_seed(SEED)`, `np.random.seed(SEED)`, `random.seed(SEED)`
+- [x] Fixar seeds: `torch.manual_seed(SEED)`, `np.random.seed(SEED)`, `random.seed(SEED)`
 
 ### 4.2 Loop de Treino
-- [ ] Criar `src/training/trainer.py`:
+- [x] Criar `src/training/trainer.py`:
   - Função `train(model, train_loader, val_loader, config)`:
     - `BCEWithLogitsLoss` com `pos_weight` para interações esparsas
     - Optimizer: `Adam` com `lr` e `weight_decay` configuráveis
@@ -409,7 +409,7 @@
   - Retornar modelo com melhor val_loss
 
 ### 4.3 Avaliação com ≥ 4 Métricas
-- [ ] Criar `src/training/evaluate.py`:
+- [x] Criar `src/training/evaluate.py`:
   - Função `evaluate_at_k(model, test_data, k=10) -> dict`:
     - `Precision@K`
     - `Recall@K`
@@ -419,19 +419,19 @@
   - Salvar resultados em `metrics/eval_metrics.json`
 
 ### 4.4 MLflow Model Registry
-- [ ] Registrar modelo no Registry:
+- [x] Registrar modelo no Registry:
   ```python
   mlflow.pytorch.log_model(model, "model", registered_model_name="recommendation-mlp")
   ```
-- [ ] Promover para Staging:
+- [x] Promover para Staging:
   ```python
   client.transition_model_version_stage(name="recommendation-mlp", version=1, stage="Staging")
   ```
-- [ ] Após validação, promover para Production:
+- [x] Após validação, promover para Production:
   ```python
   client.transition_model_version_stage(name="recommendation-mlp", version=1, stage="Production")
   ```
-- [ ] Verificar ≥ 3 runs rastreados no experimento
+- [x] Verificar ≥ 3 runs rastreados no experimento
 
 ### 4.5 Testes
 - [ ] Criar `tests/conftest.py` com fixtures compartilhadas (ex: modelo instanciado, dataset mock)
@@ -450,7 +450,7 @@
 - [ ] Commit: `test: smoke, schema and pipeline tests passing`
 
 ### 4.6 Model Card
-- [ ] Criar `docs/model_card.md` com seções:
+- [x] Criar `docs/model_card.md` com seções:
   - Descrição do modelo (arquitetura MLP, dataset, data de treino)
   - Métricas finais (Precision@K, Recall@K, NDCG@K, MAP no test set)
   - Comparação com baselines (tabela)

@@ -1,0 +1,47 @@
+schema: '2.0'
+stages:
+  preprocess:
+    cmd: uv run python -m src.data.preprocess
+    deps:
+    - path: data/raw/aisles.csv
+      hash: md5
+      md5: bc49e521faa60e1542d4a94cac3e3bb0
+      size: 2603
+    - path: data/raw/departments.csv
+      hash: md5
+      md5: 18d5219db49bd50b403d39016c3ecdc5
+      size: 270
+    - path: data/raw/order_products__prior.csv
+      hash: md5
+      md5: 8bca7ad1968ee8e07760b94db74461fb
+      size: 577550706
+    - path: data/raw/order_products__train.csv
+      hash: md5
+      md5: 5d8f7580855097e3644ea626ee430b75
+      size: 24680147
+    - path: data/raw/orders.csv
+      hash: md5
+      md5: dd0b2f4ee716409b8e79e7b1c611a0b8
+      size: 108968645
+    - path: data/raw/products.csv
+      hash: md5
+      md5: dfcfded9d4af77d8b747913a4cbe6ffc
+      size: 2166953
+    - path: src/data/preprocess.py
+      hash: md5
+      md5: f24e6224a6967ccdea6370ea5d5a8dfc
+      size: 4181
+    - path: src/features/preprocessing/
+      hash: md5
+      md5: 3a78108ce5d5350664242c3a1588fd8e.dir
+      size: 51468
+      nfiles: 16
+    - path: src/settings.py
+      hash: md5
+      md5: d3b07f08e07f5a9ec788d97886fe6724
+      size: 13852
+    outs:
+    - path: data/processed/interactions.parquet
+      hash: md5
+      md5: f20418c177301ca8d1288774bfe3fc4e
+      size: 86205121

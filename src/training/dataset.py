@@ -29,8 +29,6 @@ class InteractionDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         """Retorna o número de pares no dataset."""
         return len(self.users)
 
-    def __getitem__(
-        self, idx: int
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Retorna a tripla ``(user_idx, item_idx, label)`` na posição ``idx``."""
         return self.users[idx], self.items[idx], self.labels[idx]

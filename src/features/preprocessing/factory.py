@@ -43,9 +43,7 @@ class PreprocessorFactory:
         return strategy_cls(**kwargs)  # type: ignore[arg-type]
 
     @classmethod
-    def register(
-        cls, name: str, strategy_cls: type[PreprocessorStrategy]
-    ) -> None:
+    def register(cls, name: str, strategy_cls: type[PreprocessorStrategy]) -> None:
         """Registra uma nova estratégia sob ``name``.
 
         Args:

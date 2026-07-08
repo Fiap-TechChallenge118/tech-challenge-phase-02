@@ -14,11 +14,15 @@ Uso::
     pairs = InteractionPairsStrategy(n_negatives=1).fit_transform(frames)
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Generic, Self, TypeVar
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
+
 
 # * Tipo de saída de cada estratégia (matriz esparsa, DataFrame de pares, etc.)
 TransformOutput = TypeVar("TransformOutput")
@@ -53,6 +57,7 @@ class PreprocessorStrategy(ABC, Generic[TransformOutput]):
 
     #: Marca se ``fit`` já foi executado. Subclasses definem ``True`` ao final do fit.
     _is_fitted: bool = False
+    _logger: logging.Logger = logger
 
     @property
     def is_fitted(self) -> bool:

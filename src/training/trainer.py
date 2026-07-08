@@ -419,27 +419,29 @@ def main() -> None:
         mlflow.set_tags(mlflow_tags)
 
         # Loga parâmetros do modelo e treino
-        mlflow.log_params({
-            "model_type": model_cfg["type"],
-            "n_users": len(strategy.user_to_idx),
-            "n_items": len(strategy.item_to_idx),
-            "embedding_dim": model_cfg.get("embedding_dim", 64),
-            "hidden_dims": str(hidden_dims),
-            "dropout": model_cfg.get("dropout", 0.3),
-            "activation": model_cfg.get("activation", "relu"),
-            "batch_norm": model_cfg.get("batch_norm", True),
-            "total_params": total_params,
-            "learning_rate": train_cfg["learning_rate"],
-            "weight_decay": train_cfg["weight_decay"],
-            "batch_size": settings.batch_size,
-            "epochs": epochs,
-            "patience": train_cfg.get("patience", 5),
-            "min_delta": train_cfg.get("min_delta", 1e-4),
-            "pos_weight": pos_weight,
-            "data_frac": args.frac,
-            "random_seed": settings.random_seed,
-            "device": str(device),
-        })
+        mlflow.log_params(
+            {
+                "model_type": model_cfg["type"],
+                "n_users": len(strategy.user_to_idx),
+                "n_items": len(strategy.item_to_idx),
+                "embedding_dim": model_cfg.get("embedding_dim", 64),
+                "hidden_dims": str(hidden_dims),
+                "dropout": model_cfg.get("dropout", 0.3),
+                "activation": model_cfg.get("activation", "relu"),
+                "batch_norm": model_cfg.get("batch_norm", True),
+                "total_params": total_params,
+                "learning_rate": train_cfg["learning_rate"],
+                "weight_decay": train_cfg["weight_decay"],
+                "batch_size": settings.batch_size,
+                "epochs": epochs,
+                "patience": train_cfg.get("patience", 5),
+                "min_delta": train_cfg.get("min_delta", 1e-4),
+                "pos_weight": pos_weight,
+                "data_frac": args.frac,
+                "random_seed": settings.random_seed,
+                "device": str(device),
+            }
+        )
         mlflow.log_param("train_pairs", len(train_idx))
         mlflow.log_param("val_pairs", len(val_idx))
 
@@ -461,14 +463,16 @@ def main() -> None:
         elapsed = time.perf_counter() - t0
 
         # Loga métricas finais
-        mlflow.log_metrics({
-            "best_val_loss": float(val_losses[best_epoch - 1]),
-            "final_train_loss": train_losses[-1],
-            "best_epoch": best_epoch,
-            "total_epochs": len(train_losses),
-            "early_stopped": early_stopped,
-            "training_time_min": elapsed / 60,
-        })
+        mlflow.log_metrics(
+            {
+                "best_val_loss": float(val_losses[best_epoch - 1]),
+                "final_train_loss": train_losses[-1],
+                "best_epoch": best_epoch,
+                "total_epochs": len(train_losses),
+                "early_stopped": early_stopped,
+                "training_time_min": elapsed / 60,
+            }
+        )
 
         logger.info(
             "Treino concluído em %.1f min (%d épocas, best=%d)",

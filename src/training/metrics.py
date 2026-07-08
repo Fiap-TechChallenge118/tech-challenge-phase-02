@@ -16,9 +16,7 @@ import numpy as np
 import pandas as pd
 
 
-def _precision_at_k(
-    user_recs: np.ndarray, user_positives: set[int], k: int
-) -> float:
+def _precision_at_k(user_recs: np.ndarray, user_positives: set[int], k: int) -> float:
     """Precision@K para um único usuário.
 
     Args:
@@ -36,9 +34,7 @@ def _precision_at_k(
     return hits / k
 
 
-def _recall_at_k(
-    user_recs: np.ndarray, user_positives: set[int], k: int
-) -> float:
+def _recall_at_k(user_recs: np.ndarray, user_positives: set[int], k: int) -> float:
     """Recall@K para um único usuário.
 
     Args:
@@ -56,9 +52,7 @@ def _recall_at_k(
     return hits / len(user_positives)
 
 
-def _ndcg_at_k(
-    user_recs: np.ndarray, user_positives: set[int], k: int
-) -> float:
+def _ndcg_at_k(user_recs: np.ndarray, user_positives: set[int], k: int) -> float:
     """NDCG@K para um único usuário.
 
     Args:
@@ -134,22 +128,12 @@ def evaluate_recommendations(
 
     for i, (user_idx, positives) in enumerate(test_pairs):
         recs = recommendations[i]
-        metrics["precision_at_k"].append(
-            _precision_at_k(recs, positives, k)
-        )
-        metrics["recall_at_k"].append(
-            _recall_at_k(recs, positives, k)
-        )
-        metrics["ndcg_at_k"].append(
-            _ndcg_at_k(recs, positives, k)
-        )
-        metrics["map_at_k"].append(
-            _average_precision_at_k(recs, positives, k)
-        )
+        metrics["precision_at_k"].append(_precision_at_k(recs, positives, k))
+        metrics["recall_at_k"].append(_recall_at_k(recs, positives, k))
+        metrics["ndcg_at_k"].append(_ndcg_at_k(recs, positives, k))
+        metrics["map_at_k"].append(_average_precision_at_k(recs, positives, k))
 
-    return {
-        name: float(np.mean(values)) for name, values in metrics.items()
-    }
+    return {name: float(np.mean(values)) for name, values in metrics.items()}
 
 
 def build_test_pairs(test_df: pd.DataFrame) -> list[tuple[int, set[int]]]:

@@ -219,8 +219,7 @@ def _check_python_version(result: _ValidationResult) -> None:
         )
     else:
         result.add_ok(
-            f"Python {_c(version_str, _GREEN, bold=True)} "
-            f"{_c(f'(≥ {min_str})', _DIM)}"
+            f"Python {_c(version_str, _GREEN, bold=True)} {_c(f'(≥ {min_str})', _DIM)}"
         )
 
 
@@ -247,16 +246,12 @@ def _check_env_vars(result: _ValidationResult) -> None:
     missing: list[str] = []
     for var in _REQUIRED_VARS:
         if os.getenv(var):
-            result.add_ok(
-                f"{_c(var, _CYAN)} {_c('definida', _DIM)}"
-            )
+            result.add_ok(f"{_c(var, _CYAN)} {_c('definida', _DIM)}")
         else:
             missing.append(var)
 
     for var in missing:
-        result.add_error(
-            f"{_c(var, _CYAN)} {_ARROW} variável obrigatória ausente"
-        )
+        result.add_error(f"{_c(var, _CYAN)} {_ARROW} variável obrigatória ausente")
 
 
 def _check_imports(result: _ValidationResult) -> None:
@@ -269,14 +264,9 @@ def _check_imports(result: _ValidationResult) -> None:
         try:
             mod = importlib.import_module(module)
             version = getattr(mod, "__version__", "?")
-            result.add_ok(
-                f"{_c(label, _WHITE)} "
-                f"{_c(f'v{version}', _DIM)}"
-            )
+            result.add_ok(f"{_c(label, _WHITE)} {_c(f'v{version}', _DIM)}")
         except ImportError as exc:
-            result.add_error(
-                f"{_c(label, _WHITE)} {_ARROW} {exc}"
-            )
+            result.add_error(f"{_c(label, _WHITE)} {_ARROW} {exc}")
 
 
 def _check_settings(result: _ValidationResult) -> None:
@@ -312,12 +302,12 @@ def _check_data_dirs(result: _ValidationResult) -> None:
         result: Objeto de resultado onde erros e avisos serão registrados.
     """
     dirs_to_check: list[tuple[Path, str]] = [
-        (Path("data"),           "data/"),
-        (Path("data/raw"),       "data/raw/"),
+        (Path("data"), "data/"),
+        (Path("data/raw"), "data/raw/"),
         (Path("data/processed"), "data/processed/"),
-        (Path("configs"),        "configs/"),
-        (Path("models"),         "models/"),
-        (Path("metrics"),        "metrics/"),
+        (Path("configs"), "configs/"),
+        (Path("models"), "models/"),
+        (Path("metrics"), "metrics/"),
     ]
 
     for path, label in dirs_to_check:
@@ -326,8 +316,7 @@ def _check_data_dirs(result: _ValidationResult) -> None:
         else:
             # ! Ausência de data/ é esperada antes do dvc pull — não é erro crítico
             result.add_warning(
-                f"{_c(label, _CYAN)} não encontrado "
-                f"{_c('(rode dvc pull)', _DIM)}"
+                f"{_c(label, _CYAN)} não encontrado {_c('(rode dvc pull)', _DIM)}"
             )
 
 
@@ -408,14 +397,13 @@ def _print_summary(result: _ValidationResult) -> None:
         print(f"\n  {label}")
         for e in result.errors:
             print(f"     {_FAIL}  {_c(e, _RED)}")
-        print(
-            f"\n  {_c('Corrija os erros acima antes de continuar.', _RED)}\n"
-        )
+        print(f"\n  {_c('Corrija os erros acima antes de continuar.', _RED)}\n")
     else:
         n_warn = len(result.warnings)
         warn_label = (
-            f"{_c(str(n_warn), _YELLOW)} aviso(s)" if n_warn else
-            f"{_c('0', _GREEN)} avisos"
+            f"{_c(str(n_warn), _YELLOW)} aviso(s)"
+            if n_warn
+            else f"{_c('0', _GREEN)} avisos"
         )
         print(
             f"\n  {_c('✓  Ambiente validado com sucesso!', _GREEN, bold=True)}"

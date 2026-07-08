@@ -13,7 +13,6 @@ import pandas as pd
 
 from src.features.preprocessing.base import InstacartFrames, PreprocessorStrategy
 from src.features.preprocessing.schemas import validate_frames
-from src.settings import get_settings
 
 
 class InteractionPairsStrategy(PreprocessorStrategy[pd.DataFrame]):
@@ -27,7 +26,11 @@ class InteractionPairsStrategy(PreprocessorStrategy[pd.DataFrame]):
             seed: Semente do sampling. Se ``None``, usa ``settings.random_seed``.
         """
         self.n_negatives = n_negatives
-        self.seed = seed if seed is not None else get_settings().random_seed
+        if seed is None:
+            from src.settings import get_settings  # ? lazy import evita ciclo
+
+            seed = get_settings().random_seed
+        self.seed = seed
         self._user_to_idx: dict[int, int] = {}
         self._item_to_idx: dict[int, int] = {}
 
@@ -43,6 +46,7 @@ class InteractionPairsStrategy(PreprocessorStrategy[pd.DataFrame]):
 
     def fit(self, data: InstacartFrames) -> Self:
         """Constrói mapeamentos contíguos de usuários e itens observados."""
+        self._logger.info("Ajustando estratégia de pares de interação...")
         validate_frames(data)
         interactions = self._interactions(data)
         users = sorted(interactions["user_id"].unique())
@@ -54,6 +58,7 @@ class InteractionPairsStrategy(PreprocessorStrategy[pd.DataFrame]):
 
     def transform(self, data: InstacartFrames) -> pd.DataFrame:
         """Retorna os pares ``(user_idx, item_idx, label)`` positivos e negativos."""
+        self._logger.info("Transformando dados com estratégia de pares de interação...")
         self._ensure_fitted()
         interactions = self._interactions(data)
         positives = self._positive_pairs(interactions)
@@ -88,9 +93,7 @@ class InteractionPairsStrategy(PreprocessorStrategy[pd.DataFrame]):
             rows.extend((int(user), int(item)) for item in sampled)
         return self._to_idx_frame(rows, label=0)
 
-    def _to_idx_frame(
-        self, pairs: list[tuple[int, int]], label: int
-    ) -> pd.DataFrame:
+    def _to_idx_frame(self, pairs: list[tuple[int, int]], label: int) -> pd.DataFrame:
         """Mapeia pares de ids para índices contíguos e anexa o rótulo."""
         frame = pd.DataFrame(pairs, columns=["user_id", "product_id"])
         frame["user_idx"] = frame["user_id"].map(self._user_to_idx)

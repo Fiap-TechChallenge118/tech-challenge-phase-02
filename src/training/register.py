@@ -185,8 +185,7 @@ def main() -> None:
         latest = _find_latest_version(client, model_name)
         if latest is None:
             logger.error(
-                "Nenhuma versão encontrada para '%s'. "
-                "Execute o treino primeiro.",
+                "Nenhuma versão encontrada para '%s'. Execute o treino primeiro.",
                 model_name,
             )
             raise SystemExit(1)

@@ -9,6 +9,7 @@ from src.features.preprocessing.base import (
     NotFittedError,
     PreprocessorStrategy,
 )
+from src.features.preprocessing.enums import PreprocessorStrategyName
 from src.features.preprocessing.factory import PreprocessorFactory
 from src.features.preprocessing.interaction_pairs import InteractionPairsStrategy
 from src.features.preprocessing.user_item_matrix import (
@@ -23,6 +24,7 @@ __all__ = [
     "NotFittedError",
     "PreprocessorFactory",
     "PreprocessorStrategy",
+    "PreprocessorStrategyName",
     "UserItemMatrix",
     "UserItemMatrixStrategy",
 ]

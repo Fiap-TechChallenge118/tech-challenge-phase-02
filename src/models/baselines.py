@@ -109,9 +109,7 @@ class SklearnBaseline:
         self.model.fit(x_scaled, y)
         return self
 
-    def predict(
-        self, features: pd.DataFrame, top_k: int = 10
-    ) -> np.ndarray:
+    def predict(self, features: pd.DataFrame, top_k: int = 10) -> np.ndarray:
         """Gera top-K recomendações por usuário.
 
         Para cada usuário, prediz o score de todos os itens do catálogo

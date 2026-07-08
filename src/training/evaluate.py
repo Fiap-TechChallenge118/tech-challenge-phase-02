@@ -224,9 +224,7 @@ def main() -> None:
     )
 
     if args.frac < 1.0:
-        all_pairs = all_pairs.sample(
-            frac=args.frac, random_state=settings.random_seed
-        )
+        all_pairs = all_pairs.sample(frac=args.frac, random_state=settings.random_seed)
         logger.info(
             "Usando %.0f%% dos dados = %d pares",
             args.frac * 100,
@@ -244,7 +242,9 @@ def main() -> None:
 
     logger.info(
         "Split: %d treino / %d validação / %d teste",
-        len(train_idx), len(val_idx), len(test_idx),
+        len(train_idx),
+        len(val_idx),
+        len(test_idx),
     )
 
     # ---- Carregar test set (holdout original) ----------------------------
@@ -260,9 +260,7 @@ def main() -> None:
     # Amostra usuários para avaliação rápida
     rng = np.random.default_rng(settings.random_seed)
     if args.max_users and args.max_users < len(all_test_users):
-        test_users = rng.choice(
-            all_test_users, size=args.max_users, replace=False
-        )
+        test_users = rng.choice(all_test_users, size=args.max_users, replace=False)
         test_users.sort()
     else:
         test_users = all_test_users
@@ -351,9 +349,7 @@ def main() -> None:
     metrics_dir = Path("metrics")
     metrics_dir.mkdir(exist_ok=True)
     out = metrics_dir / "evaluation.json"
-    out.write_text(
-        json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    out.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info("Métricas salvas em %s", out)
 
     # ---- Tabela ----------------------------------------------------------
@@ -361,7 +357,11 @@ def main() -> None:
     logger.info("TABELA COMPARATIVA — Métricas@%d", top_k)
     logger.info(
         "%-25s %12s %12s %12s %12s",
-        "", "Precision", "Recall", "NDCG", "MAP",
+        "",
+        "Precision",
+        "Recall",
+        "NDCG",
+        "MAP",
     )
     for name, m in results["models"].items():
         logger.info(

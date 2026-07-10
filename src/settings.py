@@ -188,7 +188,7 @@ class Settings(BaseSettings):
     # * -----------------------------------------------------------------------
 
     mlflow_tracking_uri: str = Field(
-        default="http://localhost:5000",
+        default="sqlite:///mlflow.db",
         description="URI do servidor de tracking do MLflow "
         "(sqlite:/// suporta Registry sem servidor).",
     )

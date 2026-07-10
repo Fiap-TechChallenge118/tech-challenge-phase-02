@@ -110,12 +110,14 @@ def _mlp_recommendations(
     item_chunks = math.ceil(n_items / _MLP_ITEM_CHUNK)
     recs: list[np.ndarray] = []
 
-
-    logger.info("Gerando recomendações para %d usuários em chunks de %d", n_users, _MLP_USER_CHUNK)
+    logger.info(
+        "Gerando recomendações para %d usuários em chunks de %d",
+        n_users,
+        _MLP_USER_CHUNK,
+    )
 
     user_range = range(0, n_users, _MLP_USER_CHUNK)
     for u_start in user_range:
-
         logger.info("Processando usuários: %d/%d", u_start, n_users)
 
         u_end = min(u_start + _MLP_USER_CHUNK, n_users)

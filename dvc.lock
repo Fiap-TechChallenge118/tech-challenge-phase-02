@@ -3,14 +3,116 @@ stages:
   preprocess:
     cmd: uv run python -m src.data.preprocess
     deps:
-    - path: data/raw/aisles.csv
+    - path: data/raw/
       hash: md5
-      md5: bc49e521faa60e1542d4a94cac3e3bb0
-      size: 2603
-    - path: data/raw/departments.csv
+      md5: d77454baf88d147d71467d57d34b898c.dir
+      size: 713369324
+      nfiles: 6
+    - path: src/data/preprocess.py
       hash: md5
-      md5: 18d5219db49bd50b403d39016c3ecdc5
-      size: 270
+      md5: 6721e87d0282521f519802572be8bda0
+      size: 5301
+    - path: src/features/preprocessing/
+      hash: md5
+      md5: 70b3825c71f537965592b8cee7846876.dir
+      size: 52198
+      nfiles: 16
+    - path: src/settings.py
+      hash: md5
+      md5: 2b5fa1a0379057cb60a5011a36317246
+      size: 13854
+    outs:
+    - path: data/processed/interactions.parquet
+      hash: md5
+      md5: f20418c177301ca8d1288774bfe3fc4e
+      size: 86205121
+    - path: data/processed/mappings.json
+      hash: md5
+      md5: 05ceb783ae45b6dbcbe1ebf09e20b470
+      size: 4262327
+  train:
+    cmd: uv run python -m src.training.trainer --frac 0.2
+    deps:
+    - path: configs/config.yaml
+      hash: md5
+      md5: 59b3e673dbac3e64d919576a845479d4
+      size: 3239
+    - path: data/processed/interactions.parquet
+      hash: md5
+      md5: f20418c177301ca8d1288774bfe3fc4e
+      size: 86205121
+    - path: data/processed/mappings.json
+      hash: md5
+      md5: 05ceb783ae45b6dbcbe1ebf09e20b470
+      size: 4262327
+    - path: src/models/factory.py
+      hash: md5
+      md5: a99a277a161832827dd0f6ea9f30e283
+      size: 1760
+    - path: src/models/mlp.py
+      hash: md5
+      md5: 3854c192d46ce9b7cfaeadac8aac50b6
+      size: 4620
+    - path: src/settings.py
+      hash: md5
+      md5: 2b5fa1a0379057cb60a5011a36317246
+      size: 13854
+    - path: src/training/dataset.py
+      hash: md5
+      md5: 1e1b07d86bc053bb6dd139e648238608
+      size: 1323
+    - path: src/training/io.py
+      hash: md5
+      md5: 8726528ccfb9121ccacf54da6517cbd7
+      size: 3873
+    - path: src/training/trainer.py
+      hash: md5
+      md5: 84285cc45bf533ceb27c4bf2aa66a4c0
+      size: 15850
+    params:
+      configs/config.yaml:
+        model.activation: relu
+        model.batch_norm: true
+        model.dropout: 0.3
+        model.embedding_dim: 64
+        model.hidden_dims:
+        - 256
+        - 128
+        - 64
+        training.batch_size: 1024
+        training.learning_rate: 0.001
+        training.max_epochs: 10
+        training.min_delta: 0.0001
+        training.patience: 5
+        training.weight_decay: 1e-05
+    outs:
+    - path: data/processed/test_pairs.parquet
+      hash: md5
+      md5: cd0cfe6b954c0d142026090c0a1f120b
+      size: 3840233
+    - path: data/processed/train_pairs.parquet
+      hash: md5
+      md5: 99a631167a36c9e4a77f06886a9424bb
+      size: 30649138
+    - path: models/model.pt
+      hash: md5
+      md5: a74106a8293b9295ccd04688b406c079
+      size: 67917850
+  evaluate:
+    cmd: uv run python -m src.training.evaluate
+    deps:
+    - path: configs/config.yaml
+      hash: md5
+      md5: 59b3e673dbac3e64d919576a845479d4
+      size: 3239
+    - path: data/processed/test_pairs.parquet
+      hash: md5
+      md5: cd0cfe6b954c0d142026090c0a1f120b
+      size: 3840233
+    - path: data/processed/train_pairs.parquet
+      hash: md5
+      md5: 99a631167a36c9e4a77f06886a9424bb
+      size: 30649138
     - path: data/raw/order_products__prior.csv
       hash: md5
       md5: 8bca7ad1968ee8e07760b94db74461fb
@@ -23,25 +125,60 @@ stages:
       hash: md5
       md5: dd0b2f4ee716409b8e79e7b1c611a0b8
       size: 108968645
-    - path: data/raw/products.csv
+    - path: models/model.pt
       hash: md5
-      md5: dfcfded9d4af77d8b747913a4cbe6ffc
-      size: 2166953
-    - path: src/data/preprocess.py
-      hash: md5
-      md5: f24e6224a6967ccdea6370ea5d5a8dfc
-      size: 4181
+      md5: a74106a8293b9295ccd04688b406c079
+      size: 67917850
     - path: src/features/preprocessing/
       hash: md5
-      md5: 3a78108ce5d5350664242c3a1588fd8e.dir
-      size: 51468
+      md5: 70b3825c71f537965592b8cee7846876.dir
+      size: 52198
       nfiles: 16
+    - path: src/models/baselines.py
+      hash: md5
+      md5: 55d55b5d67a391cdcb70edd38d21032b
+      size: 5234
+    - path: src/models/mlp.py
+      hash: md5
+      md5: 3854c192d46ce9b7cfaeadac8aac50b6
+      size: 4620
     - path: src/settings.py
       hash: md5
-      md5: d3b07f08e07f5a9ec788d97886fe6724
-      size: 13852
-    outs:
-    - path: data/processed/interactions.parquet
+      md5: 2b5fa1a0379057cb60a5011a36317246
+      size: 13854
+    - path: src/training/evaluate.py
       hash: md5
-      md5: f20418c177301ca8d1288774bfe3fc4e
-      size: 86205121
+      md5: ab5b6af7034d772aea239277a08f071e
+      size: 11481
+    - path: src/training/io.py
+      hash: md5
+      md5: 8726528ccfb9121ccacf54da6517cbd7
+      size: 3873
+    - path: src/training/metrics.py
+      hash: md5
+      md5: e288bc483e85f7891e854fc4efec2690
+      size: 4919
+    outs:
+    - path: metrics/evaluation.json
+      hash: md5
+      md5: 10225906a0a8211a451abb7f14be805d
+      size: 682
+  register:
+    cmd: uv run python -m src.training.register
+    deps:
+    - path: metrics/evaluation.json
+      hash: md5
+      md5: 10225906a0a8211a451abb7f14be805d
+      size: 682
+    - path: models/model.pt
+      hash: md5
+      md5: a74106a8293b9295ccd04688b406c079
+      size: 67917850
+    - path: src/settings.py
+      hash: md5
+      md5: 2b5fa1a0379057cb60a5011a36317246
+      size: 13854
+    - path: src/training/register.py
+      hash: md5
+      md5: db90e8cd16b84f75ca2ff0b82fc78ec8
+      size: 6989

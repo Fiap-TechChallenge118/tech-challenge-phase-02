@@ -1,0 +1,107 @@
+# =============================================================================
+# dvc.yaml — Pipeline DVC reproduzível
+#
+# Execução completa:
+#   dvc repro
+#
+# Execução de um stage específico:
+#   dvc repro preprocess
+#   dvc repro train
+#
+# Visualizar grafo de dependências:
+#   dvc dag
+# =============================================================================
+
+stages:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Pré-processamento
+  # Lê os CSVs brutos e gera:
+  #   - interactions.parquet: pares (user_idx, item_idx, label)
+  #   - mappings.json:        user_to_idx e item_to_idx para reuso nos stages seguintes
+  # ---------------------------------------------------------------------------
+  preprocess:
+    cmd: uv run python -m src.data.preprocess
+    deps:
+      - src/data/preprocess.py
+      - src/features/preprocessing/
+      - src/settings.py
+      - data/raw/
+    outs:
+      - data/processed/interactions.parquet
+      - data/processed/mappings.json
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Treino
+  # Carrega interactions.parquet e mappings.json (sem reprocessar CSVs brutos),
+  # treina a MLP e persiste três artefatos para os stages seguintes.
+  # ---------------------------------------------------------------------------
+  train:
+    cmd: uv run python -m src.training.trainer --frac 0.2
+    deps:
+      - src/training/trainer.py
+      - src/training/dataset.py
+      - src/training/io.py
+      - src/models/mlp.py
+      - src/models/factory.py
+      - src/settings.py
+      - configs/config.yaml
+      - data/processed/interactions.parquet
+      - data/processed/mappings.json
+    outs:
+      - models/model.pt
+      - data/processed/train_pairs.parquet
+      - data/processed/test_pairs.parquet
+    params:
+      - configs/config.yaml:
+          - model.embedding_dim
+          - model.hidden_dims
+          - model.dropout
+          - model.activation
+          - model.batch_norm
+          - training.max_epochs
+          - training.batch_size
+          - training.learning_rate
+          - training.weight_decay
+          - training.patience
+          - training.min_delta
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Avaliação
+  # Compara MLP vs baselines (Popularity, Sklearn) e calcula 4 métricas@K.
+  # Não depende mais de data/raw/* — usa apenas artefatos dos stages anteriores,
+  # exceto orders/order_products necessários ao AggregatedFeaturesStrategy.
+  # ---------------------------------------------------------------------------
+  evaluate:
+    cmd: uv run python -m src.training.evaluate
+    deps:
+      - src/training/evaluate.py
+      - src/training/metrics.py
+      - src/training/io.py
+      - src/models/mlp.py
+      - src/models/baselines.py
+      - src/features/preprocessing/
+      - src/settings.py
+      - configs/config.yaml
+      - models/model.pt
+      - data/processed/train_pairs.parquet
+      - data/processed/test_pairs.parquet
+      - data/raw/orders.csv
+      - data/raw/order_products__prior.csv
+      - data/raw/order_products__train.csv
+    outs:
+      - metrics/evaluation.json:
+          cache: false
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Registro no MLflow Model Registry
+  # Promove a versão mais recente do modelo para Production.
+  # Não produz artefato de arquivo — o artefato vive no MLflow.
+  # ---------------------------------------------------------------------------
+  register:
+    cmd: uv run python -m src.training.register
+    deps:
+      - src/training/register.py
+      - src/settings.py
+      - models/model.pt
+      - metrics/evaluation.json

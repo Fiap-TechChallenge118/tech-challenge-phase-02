@@ -28,12 +28,44 @@ def _make(env_vars: dict, monkeypatch: pytest.MonkeyPatch) -> Settings:
     Returns:
         Nova instância de Settings construída a partir das variáveis fornecidas.
     """
-    # ! Remove HIDDEN_LAYERS do processo para que o valor real do .env
-    # ! não contamine testes que não definem essa variável explicitamente.
-    monkeypatch.delenv("HIDDEN_LAYERS", raising=False)
+    # ! Remove todas as variáveis do processo para que o .env real não
+    # ! contamine testes que verificam valores padrão.
+    _all_settings_vars = [
+        "PROJECT_NAME",
+        "ENV",
+        "RANDOM_SEED",
+        "MLFLOW_TRACKING_URI",
+        "MLFLOW_EXPERIMENT_NAME",
+        "MLFLOW_REGISTERED_MODEL_NAME",
+        "MLFLOW_TRACKING_USERNAME",
+        "MLFLOW_TRACKING_PASSWORD",
+        "DVC_REMOTE_TYPE",
+        "DVC_REMOTE_URL",
+        "DATA_DIR",
+        "DATA_RAW_DIR",
+        "DATA_PROCESSED_DIR",
+        "DATASET_NAME",
+        "PREPROCESSING_STRATEGY",
+        "N_NEGATIVES",
+        "EMBEDDING_DIM",
+        "HIDDEN_LAYERS",
+        "DROPOUT_RATE",
+        "LEARNING_RATE",
+        "MAX_EPOCHS",
+        "BATCH_SIZE",
+        "EARLY_STOPPING_PATIENCE",
+        "EVALUATION_K",
+        "VALIDATION_SPLIT",
+        "TEST_SPLIT",
+        "LOG_LEVEL",
+        "LOG_FORMAT",
+    ]
+    for var in _all_settings_vars:
+        monkeypatch.delenv(var, raising=False)
     for key, value in env_vars.items():
         monkeypatch.setenv(key, value)
-    return Settings(_env_file=None)  # type: ignore[call-arg]
+    # * Aponta env_file para caminho inexistente para evitar leitura do .env real
+    return Settings(model_config={"env_file": "/dev/null"})  # type: ignore[call-arg]
 
 
 # * ---------------------------------------------------------------------------

@@ -92,10 +92,12 @@ class TestEvaluateRecommendations:
 
     def test_multi_user_average(self) -> None:
         """Métricas devem ser a média sobre os usuários."""
-        recs = np.array([
-            [1, 2, 3],   # usuário a: 2 de 3 relevantes
-            [10, 11, 12], # usuário b: 0 de 3 relevantes
-        ])
+        recs = np.array(
+            [
+                [1, 2, 3],  # usuário a: 2 de 3 relevantes
+                [10, 11, 12],  # usuário b: 0 de 3 relevantes
+            ]
+        )
         test_pairs = [
             (0, {1, 2}),
             (1, {20, 21}),
@@ -115,11 +117,13 @@ class TestBuildTestPairs:
 
     def test_groups_positives_by_user(self) -> None:
         """Deve agrupar apenas itens positivos por usuário."""
-        df = pd.DataFrame({
-            "user_idx": [0, 0, 0, 1, 1],
-            "item_idx": [10, 20, 30, 10, 40],
-            "label": [1, 0, 1, 1, 0],
-        })
+        df = pd.DataFrame(
+            {
+                "user_idx": [0, 0, 0, 1, 1],
+                "item_idx": [10, 20, 30, 10, 40],
+                "label": [1, 0, 1, 1, 0],
+            }
+        )
         result = build_test_pairs(df)
         pairs_by_user = {uid: items for uid, items in result}
         assert pairs_by_user[0] == {10, 30}
@@ -174,20 +178,24 @@ class TestSklearnBaseline:
     @pytest.fixture
     def features(self) -> pd.DataFrame:
         """Features de usuário sintéticas."""
-        return pd.DataFrame({
-            "user_idx": [0, 1, 2],
-            "n_items": [5, 2, 8],
-            "n_orders": [3, 1, 5],
-        })
+        return pd.DataFrame(
+            {
+                "user_idx": [0, 1, 2],
+                "n_items": [5, 2, 8],
+                "n_orders": [3, 1, 5],
+            }
+        )
 
     @pytest.fixture
     def pairs(self) -> pd.DataFrame:
         """Pares de treino sintéticos."""
-        return pd.DataFrame({
-            "user_idx": [0, 0, 1, 1, 2, 2],
-            "item_idx": [10, 20, 10, 30, 20, 40],
-            "label": [1, 0, 1, 0, 0, 1],
-        })
+        return pd.DataFrame(
+            {
+                "user_idx": [0, 0, 1, 1, 2, 2],
+                "item_idx": [10, 20, 10, 30, 20, 40],
+                "label": [1, 0, 1, 0, 0, 1],
+            }
+        )
 
     def test_fit_completes(self, features, pairs) -> None:
         """fit deve completar sem erro."""

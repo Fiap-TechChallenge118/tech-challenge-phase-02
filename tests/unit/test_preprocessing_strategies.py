@@ -143,9 +143,7 @@ class TestUserItemMatrixStrategy:
             len(result.item_to_idx),
         )
 
-    def test_matrix_nonzero_equals_interactions(
-        self, frames: InstacartFrames
-    ) -> None:
+    def test_matrix_nonzero_equals_interactions(self, frames: InstacartFrames) -> None:
         """Sem filtros, o nº de células não nulas = nº de pares distintos (6)."""
         result = UserItemMatrixStrategy().fit_transform(frames)
         assert result.matrix.nnz == 6

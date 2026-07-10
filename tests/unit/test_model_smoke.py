@@ -5,6 +5,8 @@ e instanciação via factory.
 """
 
 import os
+from pathlib import Path
+from typing import Generator
 
 import numpy as np
 import pandas as pd
@@ -74,8 +76,11 @@ class TestRecommendationMLP:
         """As três funções de ativação devem ser aceitas sem erro."""
         for activation in ("relu", "gelu", "tanh"):
             model = RecommendationMLP(
-                n_users=10, n_items=10, embedding_dim=4,
-                hidden_dims=[8], activation=activation,
+                n_users=10,
+                n_items=10,
+                embedding_dim=4,
+                hidden_dims=[8],
+                activation=activation,
                 batch_norm=False,
             )
             output = model(torch.tensor([0]), torch.tensor([0]))
@@ -144,6 +149,32 @@ class TestModelFactory:
 class TestEarlyStopping:
     """Cobertura de early stopping na função train()."""
 
+    @pytest.fixture(autouse=True)
+    def _mlflow_local(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> Generator:
+        """Aponta MLflow para sqlite local e abre uma run isolada por teste.
+
+        Cada teste roda dentro de um ``mlflow.start_run()`` próprio para evitar
+        que um run_id de um teste anterior seja herdado pelo próximo.
+        """
+        import mlflow
+
+        uri = f"sqlite:///{tmp_path}/mlflow_test.db"
+        monkeypatch.setenv("MLFLOW_TRACKING_URI", uri)
+        mlflow.set_tracking_uri(uri)
+
+        # * Garante que não há run ativa residual antes de abrir a nova
+        while mlflow.active_run():
+            mlflow.end_run()
+
+        with mlflow.start_run():
+            yield
+
+        # * Encerra a run ao sair do teste (mesmo que falhe)
+        if mlflow.active_run():
+            mlflow.end_run()
+
     @pytest.fixture
     def dummy_data(self) -> DataLoader:
         """Dataset sintético pequeno para teste rápido de early stopping."""
@@ -162,8 +193,11 @@ class TestEarlyStopping:
     def _make_model(self) -> RecommendationMLP:
         """Modelo mínimo para teste."""
         return RecommendationMLP(
-            n_users=10, n_items=20, embedding_dim=4,
-            hidden_dims=[8], batch_norm=False,
+            n_users=10,
+            n_items=20,
+            embedding_dim=4,
+            hidden_dims=[8],
+            batch_norm=False,
         )
 
     def test_early_stopping_triggers(self, dummy_data: DataLoader) -> None:

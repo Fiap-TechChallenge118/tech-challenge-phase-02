@@ -2,7 +2,11 @@
 
 Lê os CSVs brutos do Instacart (``data/raw/``), instancia a estratégia de
 pré-processamento definida em ``configs/config.yaml`` via ``PreprocessorFactory``
-e salva o resultado em ``data/processed/interactions.parquet``.
+e salva dois artefatos em ``data/processed/``:
+
+- ``interactions.parquet`` — pares ``(user_idx, item_idx, label)`` prontos para treino.
+- ``mappings.json`` — mapeamentos ``user_to_idx`` / ``item_to_idx`` aprendidos no fit,
+  consumidos pelo stage ``train`` e ``evaluate`` sem precisar reprocessar os CSVs.
 
 A estratégia padrão é ``interaction_pairs``, que gera triplas
 ``(user_idx, item_idx, label)`` com negative sampling. Trocar a estratégia
@@ -17,6 +21,7 @@ Uso::
 """
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
@@ -120,7 +125,7 @@ def main() -> None:
             len(pairs),
         )
 
-    # * 5 — Salvar artefato de saída
+    # * 5 — Salvar artefato principal
     out_path = processed_dir / "interactions.parquet"
     pairs.to_parquet(out_path, index=False)
     logger.info(
@@ -128,6 +133,24 @@ def main() -> None:
         out_path,
         len(pairs),
     )
+
+    # * 6 — Salvar mapeamentos para reuso nos stages train e evaluate
+    # * Evita que trainer/evaluate reprocessem os CSVs brutos só para obter os índices
+    if hasattr(strategy, "user_to_idx") and hasattr(strategy, "item_to_idx"):
+        mappings = {
+            "user_to_idx": {str(k): v for k, v in strategy.user_to_idx.items()},
+            "item_to_idx": {str(k): v for k, v in strategy.item_to_idx.items()},
+        }
+        mappings_path = processed_dir / "mappings.json"
+        mappings_path.write_text(
+            json.dumps(mappings, ensure_ascii=False), encoding="utf-8"
+        )
+        logger.info(
+            "mappings.json salvo em %s (usuários=%d, itens=%d)",
+            mappings_path,
+            len(strategy.user_to_idx),
+            len(strategy.item_to_idx),
+        )
 
 
 if __name__ == "__main__":

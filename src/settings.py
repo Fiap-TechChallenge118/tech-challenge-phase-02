@@ -14,6 +14,7 @@ Uso::
 
 import json
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator
@@ -23,6 +24,8 @@ from pydantic_settings import (
     EnvSettingsSource,
     SettingsConfigDict,
 )
+
+from src.features.preprocessing.enums import PreprocessorStrategyName
 
 # * ---------------------------------------------------------------------------
 # * Utilitário público — também usado diretamente nos testes unitários
@@ -185,7 +188,7 @@ class Settings(BaseSettings):
     # * -----------------------------------------------------------------------
 
     mlflow_tracking_uri: str = Field(
-        default="sqlite:///mlflow.db",
+        default="http://localhost:5000",
         description="URI do servidor de tracking do MLflow "
         "(sqlite:/// suporta Registry sem servidor).",
     )
@@ -246,6 +249,27 @@ class Settings(BaseSettings):
     dataset_name: Literal["instacart"] = Field(
         default="instacart",
         description="Identificador do dataset.",
+    )
+
+    # * -----------------------------------------------------------------------
+    # * Pré-processamento
+    # * -----------------------------------------------------------------------
+
+    preprocessing_strategy: PreprocessorStrategyName = Field(
+        default=PreprocessorStrategyName.INTERACTION_PAIRS,
+        description=(
+            "Estratégia de pré-processamento via PreprocessorFactory. "
+            "Definida em configs/config.yaml (data.strategy)."
+        ),
+    )
+
+    n_negatives: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Negativos amostrados por par positivo (interaction_pairs). "
+            "Definido em configs/config.yaml (data.n_negatives)."
+        ),
     )
 
     # * -----------------------------------------------------------------------
@@ -365,9 +389,26 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Retorna uma instância cacheada de Settings.
 
-    Utiliza lru_cache para que o arquivo .env seja lido apenas uma vez por processo.
+    Carrega ``configs/config.yaml`` e injeta os valores da seção ``data``
+    como overrides, permitindo que o config seja a fonte da verdade para
+    parâmetros do pipeline enquanto o ``.env`` continua responsável pelos
+    valores de runtime e infraestrutura.
 
     Returns:
         Objeto Settings singleton.
     """
-    return Settings()
+    import yaml  # ? import local — yaml só é necessário aqui
+
+    config_path = Path("configs/config.yaml")
+    overrides: dict = {}
+
+    if config_path.exists():
+        with config_path.open(encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh) or {}
+        data_cfg = cfg.get("data", {})
+        if "strategy" in data_cfg:
+            overrides["preprocessing_strategy"] = data_cfg["strategy"]
+        if "n_negatives" in data_cfg:
+            overrides["n_negatives"] = data_cfg["n_negatives"]
+
+    return Settings(**overrides)

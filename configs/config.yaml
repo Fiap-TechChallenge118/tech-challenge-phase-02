@@ -32,7 +32,7 @@ model:
 # -----------------------------------------------------------------------------
 training:
   # Número máximo de épocas
-  max_epochs: 50
+  max_epochs: 10
 
   # Tamanho do batch
   batch_size: 1024
@@ -70,6 +70,13 @@ data:
 
   # Número mínimo de compras por produto (filtro de cauda longa)
   min_item_interactions: 5
+
+  # Estratégia de pré-processamento a instanciar via PreprocessorFactory
+  # Opções: interaction_pairs | user_item_matrix | aggregated_features
+  strategy: interaction_pairs
+
+  # Número de negativos amostrados por par positivo (usado por interaction_pairs)
+  n_negatives: 1
 
 # -----------------------------------------------------------------------------
 # Avaliação

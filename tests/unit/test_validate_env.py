@@ -137,9 +137,7 @@ class TestCheckEnvVars:
 
         assert result.ok
 
-    def test_variavel_ausente_gera_erro(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_variavel_ausente_gera_erro(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Cada variável ausente deve gerar um erro distinto."""
         # * Remove todas as variáveis obrigatórias do ambiente
         for var in _REQUIRED_VARS:
@@ -154,9 +152,7 @@ class TestCheckEnvVars:
         assert not result.ok
         assert len(result.errors) == len(_REQUIRED_VARS)
 
-    def test_mensagem_erro_cita_variavel(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_mensagem_erro_cita_variavel(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A mensagem de erro deve citar o nome da variável ausente."""
         for var in _REQUIRED_VARS:
             monkeypatch.delenv(var, raising=False)
@@ -170,9 +166,7 @@ class TestCheckEnvVars:
         for var in _REQUIRED_VARS:
             assert var in nomes_com_erro
 
-    def test_env_file_ausente_gera_aviso(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_file_ausente_gera_aviso(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Ausência do arquivo .env deve gerar aviso, não erro."""
         for var in _REQUIRED_VARS:
             monkeypatch.setenv(var, "qualquer")
@@ -293,9 +287,7 @@ class TestCheckSettings:
         """Settings com campo inválido deve gerar um erro."""
         result = _ValidationResult()
 
-        mock_settings_cls = MagicMock(
-            side_effect=Exception("campo inválido simulado")
-        )
+        mock_settings_cls = MagicMock(side_effect=Exception("campo inválido simulado"))
 
         with patch("scripts.validate_env.Path"):
             with patch.dict(
@@ -315,35 +307,45 @@ class TestCheckSettings:
 class TestMainExitCodes:
     """main() deve encerrar com o código de saída correto para cada cenário."""
 
-    def test_saida_ok_ambiente_valido(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Ambiente completamente válido deve sair com código 0."""
-        # * Valores válidos para os campos Literal do Settings
-        valores_validos: dict[str, str] = {
-            "PROJECT_NAME": "tech-challenge-02",
-            "ENV": "development",
-            "MLFLOW_TRACKING_URI": "http://localhost:5000",
-            "MLFLOW_EXPERIMENT_NAME": "recommendation-system",
-            "MLFLOW_REGISTERED_MODEL_NAME": "recommender-mlp",
-            "DVC_REMOTE_TYPE": "local",
-            "DVC_REMOTE_URL": "/tmp/dvc-remote",
-            "DATA_DIR": "data",
-            "DATA_RAW_DIR": "data/raw",
-            "DATA_PROCESSED_DIR": "data/processed",
-            "DATASET_NAME": "instacart",
-        }
-        for var, val in valores_validos.items():
-            monkeypatch.setenv(var, val)
+    def test_saida_ok_ambiente_valido(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Ambiente completamente válido deve sair com código 0.
+
+        _check_imports é mockado para isolar o teste de dependências de ambiente
+        (ex: CUDA ausente em máquinas de CI sem GPU).
+        """
+        # * Define todas as variáveis obrigatórias com valores válidos para o Settings
+        for var in _REQUIRED_VARS:
+            env_values: dict[str, str] = {
+                "PROJECT_NAME": "tech-challenge-02",
+                "ENV": "development",
+                "MLFLOW_TRACKING_URI": "http://localhost:5000",
+                "MLFLOW_EXPERIMENT_NAME": "recommendation-system",
+                "MLFLOW_REGISTERED_MODEL_NAME": "recommender-mlp",
+                "DVC_REMOTE_TYPE": "local",
+                "DVC_REMOTE_URL": "/tmp/dvc-remote",
+                "DATA_DIR": "data",
+                "DATA_RAW_DIR": "data/raw",
+                "DATA_PROCESSED_DIR": "data/processed",
+                "DATASET_NAME": "instacart",
+            }
+            monkeypatch.setenv(var, env_values.get(var, "valor-de-teste"))
         monkeypatch.delenv("HIDDEN_LAYERS", raising=False)
 
         from scripts.validate_env import main
 
+        # ! Mocka _check_imports para não depender de CUDA ou libs nativas no CI
+        def _imports_sem_erro(result: object) -> None:
+            pass
+
         with pytest.raises(SystemExit) as exc:
-            with patch("scripts.validate_env.Path") as mock_path:
-                mock_path.return_value.exists.return_value = True
-                mock_path.return_value.resolve.return_value = Path(".env")
-                main()
+            with patch(
+                "scripts.validate_env._check_imports",
+                side_effect=_imports_sem_erro,
+            ):
+                with patch("scripts.validate_env.Path") as mock_path:
+                    mock_path.return_value.exists.return_value = True
+                    mock_path.return_value.resolve.return_value = Path(".env")
+                    main()
 
         assert exc.value.code == _EXIT_OK
 
@@ -358,9 +360,7 @@ class TestMainExitCodes:
 
         assert exc.value.code == _EXIT_PYTHON_VERSION
 
-    def test_saida_variaveis_ausentes(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_saida_variaveis_ausentes(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Variáveis ausentes devem sair com código 2."""
         for var in _REQUIRED_VARS:
             monkeypatch.delenv(var, raising=False)

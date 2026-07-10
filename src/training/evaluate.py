@@ -2,17 +2,18 @@
 
 Módulo executável que:
 
-1. Carrega o checkpoint ``models/model.pt`` e o test set
-2. Re-processa os dados brutos para obter os pares de treino (mesmo seed)
-3. Instancia os baselines (Popularity, Sklearn) e os treina no train set
-4. Gera recomendações top-K para cada modelo
-5. Calcula Precision@K, Recall@K, NDCG@K, MAP@K
-6. Salva a tabela comparativa em ``metrics/evaluation.json``
+1. Carrega o checkpoint ``models/model.pt``
+2. Carrega ``data/processed/test_pairs.parquet`` (holdout gerado pelo trainer)
+3. Carrega ``data/processed/train_pairs.parquet`` (para treinar os baselines)
+4. Instancia os baselines (Popularity, Sklearn) e os treina no train set
+5. Gera recomendações top-K para cada modelo
+6. Calcula Precision@K, Recall@K, NDCG@K, MAP@K
+7. Salva a tabela comparativa em ``metrics/evaluation.json``
+
 
 Uso::
-
     uv run python -m src.training.evaluate
-    uv run python -m src.training.evaluate --max-users 5000 --frac 0.2
+    uv run python -m src.training.evaluate --max-users 5000
 """
 
 from __future__ import annotations
@@ -27,21 +28,18 @@ import numpy as np
 import pandas as pd
 import torch
 
-from src.features.preprocessing import (
-    AggregatedFeaturesStrategy,
-    InstacartFrames,
-    InteractionPairsStrategy,
-)
+from src.features.preprocessing import AggregatedFeaturesStrategy, InstacartFrames
 from src.models.baselines import PopularityBaseline, SklearnBaseline
 from src.models.mlp import RecommendationMLP
 from src.settings import get_settings
+from src.training.io import load_pairs
 from src.training.metrics import build_test_pairs, evaluate_recommendations
 
 logger = logging.getLogger(__name__)
 
-# Chunks ajustados para 8 GB VRAM. Cada forward passa ~262k linhas
-# (64 users × 4096 itens) que ocupam ≈ 500 MB nos tensores.
-_MLP_USER_CHUNK = 64
+# * Chunks ajustados para 8 GB VRAM.
+# * Cada forward passa ~262k linhas (128 users × 4096 itens) ≈ 500 MB.
+_MLP_USER_CHUNK = 128
 _MLP_ITEM_CHUNK = 4096
 
 
@@ -54,7 +52,13 @@ def _load_mlp(path: Path, device: torch.device) -> tuple[RecommendationMLP, dict
 
     Returns:
         Tupla ``(modelo, checkpoint)``.
+
+    Raises:
+        SystemExit: Se o arquivo não existir.
     """
+    if not path.exists():
+        logger.error("Checkpoint não encontrado: %s", path)
+        raise SystemExit(1)
     ckpt = torch.load(path, map_location=device, weights_only=False)
     model = RecommendationMLP(
         n_users=ckpt["n_users"],
@@ -98,7 +102,7 @@ def _mlp_recommendations(
     n_items = len(all_items)
     n_users = len(test_users)
 
-    # Pré-computa embeddings de todos os itens (~50k × 64 × 4B = 13 MB)
+    # * Pré-computa embeddings de todos os itens (~50k × 64 × 4B = 13 MB)
     item_ids_tensor = torch.as_tensor(all_items, device=device)
     with torch.no_grad():
         item_embs_all = model.item_embedding(item_ids_tensor)
@@ -106,7 +110,14 @@ def _mlp_recommendations(
     item_chunks = math.ceil(n_items / _MLP_ITEM_CHUNK)
     recs: list[np.ndarray] = []
 
-    for u_start in range(0, n_users, _MLP_USER_CHUNK):
+
+    logger.info("Gerando recomendações para %d usuários em chunks de %d", n_users, _MLP_USER_CHUNK)
+
+    user_range = range(0, n_users, _MLP_USER_CHUNK)
+    for u_start in user_range:
+
+        logger.info("Processando usuários: %d/%d", u_start, n_users)
+
         u_end = min(u_start + _MLP_USER_CHUNK, n_users)
         batch_users = test_users[u_start:u_end]
         n_batch = len(batch_users)
@@ -116,13 +127,13 @@ def _mlp_recommendations(
             user_embs = model.user_embedding(user_tensor)
 
         all_scores: list[torch.Tensor] = []
+
         for c in range(item_chunks):
             i_start = c * _MLP_ITEM_CHUNK
             i_end = min(i_start + _MLP_ITEM_CHUNK, n_items)
             item_embs = item_embs_all[i_start:i_end]
             chunk_size = i_end - i_start
 
-            # Cross-join: user × item do chunk
             user_expanded = user_embs.repeat_interleave(chunk_size, dim=0)
             item_expanded = item_embs.repeat(n_batch, 1)
             combined = torch.cat([user_expanded, item_expanded], dim=-1)
@@ -139,36 +150,40 @@ def _mlp_recommendations(
     return np.array(recs)
 
 
-def _load_frames(data_dir: Path) -> InstacartFrames:
-    """Carrega CSVs brutos do Instacart."""
-    orders = pd.read_csv(data_dir / "orders.csv")
-    prior = pd.read_csv(data_dir / "order_products__prior.csv")
-    train_orders = pd.read_csv(data_dir / "order_products__train.csv")
-    products = pd.read_csv(data_dir / "products.csv")
-    aisles = pd.read_csv(data_dir / "aisles.csv")
-    departments = pd.read_csv(data_dir / "departments.csv")
-    return InstacartFrames(
+def _build_aggregated_features(raw_dir: Path) -> pd.DataFrame:
+    """Constrói features agregadas por usuário para o SklearnBaseline.
+
+    Lê apenas ``orders.csv``, ``order_products__prior.csv`` e
+    ``order_products__train.csv`` — os três arquivos necessários para
+    ``AggregatedFeaturesStrategy``. Products/aisles/departments não são
+    usados por essa estratégia e não são carregados.
+
+    Args:
+        raw_dir: Caminho para o diretório ``data/raw/``.
+
+    Returns:
+        DataFrame de features com coluna ``user_idx`` (renomeada de ``user_id``).
+    """
+    orders = pd.read_csv(raw_dir / "orders.csv")
+    prior = pd.read_csv(raw_dir / "order_products__prior.csv")
+    train_orders = pd.read_csv(raw_dir / "order_products__train.csv")
+    order_products = pd.concat([prior, train_orders], ignore_index=True)
+
+    # * AggregatedFeaturesStrategy usa apenas orders e order_products
+    empty = pd.DataFrame()
+    frames = InstacartFrames(
         orders=orders,
-        order_products=pd.concat([prior, train_orders], ignore_index=True),
-        products=products,
-        aisles=aisles,
-        departments=departments,
+        order_products=order_products,
+        products=empty,
+        aisles=empty,
+        departments=empty,
     )
-
-
-def _split_train_val_test(
-    n: int, val_frac: float, test_frac: float, seed: int
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Divide índices em treino, validação e teste deterministicamente."""
-    rng = np.random.default_rng(seed)
-    indices = rng.permutation(n)
-    test_end = int(n * test_frac)
-    val_end = test_end + int(n * val_frac)
-    return indices[val_end:], indices[test_end:val_end], indices[:test_end]
+    agg = AggregatedFeaturesStrategy(scale=True).fit_transform(frames)
+    return agg.rename(columns={"user_id": "user_idx"})
 
 
 def _parse_args() -> argparse.Namespace:
-    """CLI com opção de limitar usuários e fração dos dados."""
+    """CLI com opção de limitar usuários avaliados."""
     parser = argparse.ArgumentParser(
         description="Avaliação comparativa MLP vs baselines"
     )
@@ -177,12 +192,6 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=5000,
         help="Número máximo de usuários do test set (default: 5000)",
-    )
-    parser.add_argument(
-        "--frac",
-        type=float,
-        default=0.2,
-        help="Fração dos dados usada no treino (default: 0.2)",
     )
     return parser.parse_args()
 
@@ -199,65 +208,15 @@ def main() -> None:
     settings = get_settings()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     top_k = settings.evaluation_k
-    model_path = Path("models/model.pt")
-    test_path = Path(settings.data_processed_dir) / "test_pairs.parquet"
+    processed_dir = Path(settings.data_processed_dir)
 
-    if not model_path.exists():
-        logger.error("Checkpoint não encontrado: %s", model_path)
-        raise SystemExit(1)
+    # * ---- Carregar modelo e pares processados ---------------------------
+    mlp, ckpt = _load_mlp(Path("models/model.pt"), device)
+    test_pairs = load_pairs(processed_dir / "test_pairs.parquet")
+    train_pairs = load_pairs(processed_dir / "train_pairs.parquet")
 
-    # ---- Carregar MLP ----------------------------------------------------
-    mlp, ckpt = _load_mlp(model_path, device)
-
-    # ---- Re-processar dados para baselines --------------------------------
-    # Replica o pipeline de treino com o mesmo seed para obter os pares
-    # de treino SEM vazamento do test set.
-    logger.info("Carregando dados brutos e gerando pares de interação...")
-    frames = _load_frames(Path(settings.data_raw_dir))
-    strategy = InteractionPairsStrategy(seed=settings.random_seed)
-    all_pairs = strategy.fit_transform(frames)
-    logger.info(
-        "Pares gerados: %d (usuários=%d, itens=%d)",
-        len(all_pairs),
-        len(strategy.user_to_idx),
-        len(strategy.item_to_idx),
-    )
-
-    if args.frac < 1.0:
-        all_pairs = all_pairs.sample(frac=args.frac, random_state=settings.random_seed)
-        logger.info(
-            "Usando %.0f%% dos dados = %d pares",
-            args.frac * 100,
-            len(all_pairs),
-        )
-
-    # Split triplo determinístico (mesmo do treino)
-    train_idx, val_idx, test_idx = _split_train_val_test(
-        len(all_pairs),
-        settings.validation_split,
-        settings.test_split,
-        settings.random_seed,
-    )
-    train_pairs = all_pairs.iloc[train_idx].copy()
-
-    logger.info(
-        "Split: %d treino / %d validação / %d teste",
-        len(train_idx),
-        len(val_idx),
-        len(test_idx),
-    )
-
-    # ---- Carregar test set (holdout original) ----------------------------
-    if test_path.exists():
-        test_pairs = pd.read_parquet(test_path)
-        logger.info("Test set carregado de %s (%d pares)", test_path, len(test_pairs))
-    else:
-        test_pairs = all_pairs.iloc[test_idx].copy()
-        logger.warning("Test set não encontrado, usando split atual.")
-
+    # * ---- Selecionar usuários para avaliação ----------------------------
     all_test_users = np.sort(test_pairs["user_idx"].unique())
-
-    # Amostra usuários para avaliação rápida
     rng = np.random.default_rng(settings.random_seed)
     if args.max_users and args.max_users < len(all_test_users):
         test_users = rng.choice(all_test_users, size=args.max_users, replace=False)
@@ -265,8 +224,7 @@ def main() -> None:
     else:
         test_users = all_test_users
 
-    user_mask = test_pairs["user_idx"].isin(test_users)
-    filtered_pairs = test_pairs[user_mask]
+    filtered_pairs = test_pairs[test_pairs["user_idx"].isin(test_users)]
     test_pairs_list = build_test_pairs(filtered_pairs)
 
     logger.info(
@@ -275,16 +233,15 @@ def main() -> None:
         len(test_pairs_list),
     )
 
-    # Catálogo completo de itens (do checkpoint, que cobre todos os itens)
     all_items = np.array(sorted(ckpt["item_to_idx"].values()), dtype=np.int64)
     logger.info("Catálogo: %d itens", len(all_items))
 
-    # ---- MLP -------------------------------------------------------------
+    # * ---- MLP -----------------------------------------------------------
     logger.info("Gerando recomendações da MLP (pré-compute de embeddings)...")
     mlp_recs = _mlp_recommendations(mlp, all_items, test_users, top_k, device)
     mlp_metrics = evaluate_recommendations(mlp_recs, test_pairs_list, top_k)
     logger.info(
-        "MLP  — P@%d: %.4f | R@%d: %.4f | NDCG@%d: %.4f | MAP@%d: %.4f",
+        "MLP  — Precision@%d: %.4f | Recall@%d: %.4f | NDCG@%d: %.4f | MAP@%d: %.4f",
         top_k,
         mlp_metrics["precision_at_k"],
         top_k,
@@ -295,13 +252,13 @@ def main() -> None:
         mlp_metrics["map_at_k"],
     )
 
-    # ---- Popularity Baseline (treinado no TRAIN set) ---------------------
+    # * ---- Popularity Baseline (treinado nos pares de treino) ------------
     logger.info("Treinando PopularityBaseline no train set...")
     pop = PopularityBaseline().fit(train_pairs)
     pop_recs = pop.predict(test_users, top_k=top_k)
     pop_metrics = evaluate_recommendations(pop_recs, test_pairs_list, top_k)
     logger.info(
-        "Pop  — P@%d: %.4f | R@%d: %.4f | NDCG@%d: %.4f | MAP@%d: %.4f",
+        "Pop  — Precision@%d: %.4f | Recall@%d: %.4f | NDCG@%d: %.4f | MAP@%d: %.4f",
         top_k,
         pop_metrics["precision_at_k"],
         top_k,
@@ -312,10 +269,11 @@ def main() -> None:
         pop_metrics["map_at_k"],
     )
 
-    # ---- Sklearn Baseline (treinado no TRAIN set) ------------------------
-    logger.info("Treinando SklearnBaseline no train set...")
-    agg = AggregatedFeaturesStrategy(scale=True).fit_transform(frames)
-    agg = agg.rename(columns={"user_id": "user_idx"})
+    # * ---- Sklearn Baseline (precisa de features comportamentais) --------
+    # ! AggregatedFeaturesStrategy requer orders + order_products dos CSVs brutos
+    # ! pois gera estatísticas (n_orders, reorder_rate, etc.) não presentes nos pares
+    logger.info("Construindo features agregadas para SklearnBaseline...")
+    agg = _build_aggregated_features(Path(settings.data_raw_dir))
     sk = SklearnBaseline(seed=settings.random_seed).fit(agg, train_pairs)
     sk_recs = sk.predict(
         agg[agg["user_idx"].isin(test_users)],
@@ -323,7 +281,7 @@ def main() -> None:
     )
     sk_metrics = evaluate_recommendations(sk_recs, test_pairs_list, top_k)
     logger.info(
-        "SKL  — P@%d: %.4f | R@%d: %.4f | NDCG@%d: %.4f | MAP@%d: %.4f",
+        "SKL  — Precision@%d: %.4f | Recall@%d: %.4f | NDCG@%d: %.4f | MAP@%d: %.4f",
         top_k,
         sk_metrics["precision_at_k"],
         top_k,
@@ -334,7 +292,7 @@ def main() -> None:
         sk_metrics["map_at_k"],
     )
 
-    # ---- Resultados ------------------------------------------------------
+    # * ---- Salvar resultados ---------------------------------------------
     results = {
         "top_k": top_k,
         "test_users": int(len(test_pairs_list)),
@@ -352,7 +310,7 @@ def main() -> None:
     out.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info("Métricas salvas em %s", out)
 
-    # ---- Tabela ----------------------------------------------------------
+    # * ---- Tabela comparativa --------------------------------------------
     logger.info("=" * 70)
     logger.info("TABELA COMPARATIVA — Métricas@%d", top_k)
     logger.info(

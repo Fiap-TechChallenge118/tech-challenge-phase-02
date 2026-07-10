@@ -2,13 +2,13 @@
 
 Módulo executável que orquestra o treino ponta a ponta:
 
-1. Carrega os CSVs brutos do Instacart (``data/raw/``)
-2. Constrói pares user-item via ``InteractionPairsStrategy``
+1. Carrega ``data/processed/interactions.parquet`` (produzido pelo stage preprocess)
+2. Carrega ``data/processed/mappings.json`` (user_to_idx / item_to_idx)
 3. Divide em treino (80%) / validação (10%) / teste (10%)
 4. Instancia ``RecommendationMLP`` via ``ModelFactory``
 5. Treina com ``BCEWithLogitsLoss`` + ``Adam``
 6. Loga parâmetros, métricas e artefatos no MLflow Tracking
-7. Salva checkpoint + test set para avaliação futura
+7. Salva checkpoint + train_pairs.parquet + test_pairs.parquet para avaliação futura
 
 Uso::
 
@@ -32,74 +32,15 @@ from pathlib import Path
 
 import mlflow
 import numpy as np
-import pandas as pd
 import torch
-import yaml
 from torch.utils.data import DataLoader
 
-from src.features.preprocessing import InstacartFrames, InteractionPairsStrategy
 from src.models.factory import ModelFactory
 from src.settings import get_settings
 from src.training.dataset import InteractionDataset
+from src.training.io import load_config, load_mappings, load_pairs, split_train_val_test
 
 logger = logging.getLogger(__name__)
-
-
-def _load_frames(data_dir: Path) -> InstacartFrames:
-    """Carrega os CSVs brutos do Instacart e retorna os DataFrames agrupados.
-
-    Args:
-        data_dir: Caminho para ``data/raw/``.
-
-    Returns:
-        DataFrames prontos para o pré-processamento.
-    """
-    orders = pd.read_csv(data_dir / "orders.csv")
-    prior = pd.read_csv(data_dir / "order_products__prior.csv")
-    train_orders = pd.read_csv(data_dir / "order_products__train.csv")
-    products = pd.read_csv(data_dir / "products.csv")
-    aisles = pd.read_csv(data_dir / "aisles.csv")
-    departments = pd.read_csv(data_dir / "departments.csv")
-
-    order_products = pd.concat([prior, train_orders], ignore_index=True)
-    logger.info(
-        "Dados carregados: %d pedidos, %d interações, %d produtos",
-        len(orders),
-        len(order_products),
-        len(products),
-    )
-
-    return InstacartFrames(
-        orders=orders,
-        order_products=order_products,
-        products=products,
-        aisles=aisles,
-        departments=departments,
-    )
-
-
-def _split_train_val_test(
-    n: int, val_frac: float, test_frac: float, seed: int
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Divide índices em treino, validação e teste deterministicamente.
-
-    Args:
-        n: Número total de amostras.
-        val_frac: Fração reservada para validação.
-        test_frac: Fração reservada para teste (holdout, nunca visto no treino).
-        seed: Semente para reprodutibilidade.
-
-    Returns:
-        Tupla ``(train_indices, val_indices, test_indices)``.
-    """
-    rng = np.random.default_rng(seed)
-    indices = rng.permutation(n)
-    test_end = int(n * test_frac)
-    val_end = test_end + int(n * val_frac)
-    test_idx = indices[:test_end]
-    val_idx = indices[test_end:val_end]
-    train_idx = indices[val_end:]
-    return train_idx, val_idx, test_idx
 
 
 def _set_seeds(seed: int) -> None:
@@ -121,19 +62,6 @@ def _set_seeds(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-
-
-def _load_config(path: Path) -> dict:
-    """Carrega o arquivo YAML de configuração.
-
-    Args:
-        path: Caminho para ``configs/config.yaml``.
-
-    Returns:
-        Dicionário com os valores do YAML.
-    """
-    with path.open(encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
 
 
 def train(
@@ -215,7 +143,7 @@ def train(
         else:
             stale += 1
 
-        # MLflow: loga métricas por época
+        # * Loga métricas por época no MLflow
         mlflow.log_metrics(
             {
                 "train_loss": avg_train,
@@ -289,6 +217,37 @@ def _build_dataloaders(
     return train_loader, val_loader
 
 
+def _save_split_pairs(
+    pairs,
+    train_idx: np.ndarray,
+    test_idx: np.ndarray,
+    processed_dir: Path,
+) -> None:
+    """Persiste os subsets de treino e teste como parquet para os stages seguintes.
+
+    Args:
+        pairs: DataFrame completo de pares.
+        train_idx: Índices do split de treino.
+        test_idx: Índices do split de teste.
+        processed_dir: Diretório de saída (``data/processed/``).
+    """
+    train_pairs = pairs.iloc[train_idx].copy()
+    train_pairs.to_parquet(processed_dir / "train_pairs.parquet", index=False)
+    logger.info(
+        "train_pairs.parquet salvo em %s (%d pares)",
+        processed_dir / "train_pairs.parquet",
+        len(train_pairs),
+    )
+
+    test_pairs = pairs.iloc[test_idx].copy()
+    test_pairs.to_parquet(processed_dir / "test_pairs.parquet", index=False)
+    logger.info(
+        "test_pairs.parquet salvo em %s (%d pares)",
+        processed_dir / "test_pairs.parquet",
+        len(test_pairs),
+    )
+
+
 def main() -> None:
     """Ponto de entrada do script de treino."""
     parser = argparse.ArgumentParser(description="Treinar MLP de recomendação.")
@@ -312,20 +271,16 @@ def main() -> None:
     )
 
     settings = get_settings()
-    cfg = _load_config(Path("configs/config.yaml"))
+    cfg = load_config(Path("configs/config.yaml"))
     _set_seeds(settings.random_seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Dispositivo: %s | Seed: %d", device, settings.random_seed)
 
-    # ---- MLflow setup -----------------------------------------------------
+    # * ---- MLflow setup --------------------------------------------------
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     mlflow.set_experiment(settings.mlflow_experiment_name)
-    # Garante que não há run ativo residual
     while mlflow.active_run():
         mlflow.end_run()
-
-    if settings.mlflow_tracking_username and settings.mlflow_tracking_password:
-        logger.info("MLflow: autenticação básica configurada.")
 
     logger.info(
         "MLflow: tracking_uri=%s | experiment=%s",
@@ -333,25 +288,25 @@ def main() -> None:
         settings.mlflow_experiment_name,
     )
 
-    # ---- Pré-processamento ------------------------------------------------
-    frames = _load_frames(Path(settings.data_raw_dir))
-    strategy = InteractionPairsStrategy(seed=settings.random_seed)
-    pairs = strategy.fit_transform(frames)
+    # * ---- Carregar dados processados (sem reprocessar CSVs brutos) ------
+    processed_dir = Path(settings.data_processed_dir)
+    pairs = load_pairs(processed_dir / "interactions.parquet")
+    user_to_idx, item_to_idx = load_mappings(processed_dir / "mappings.json")
     logger.info(
-        "Pares gerados: %d (usuários=%d, itens=%d)",
+        "Dados carregados: %d pares (usuários=%d, itens=%d)",
         len(pairs),
-        len(strategy.user_to_idx),
-        len(strategy.item_to_idx),
+        len(user_to_idx),
+        len(item_to_idx),
     )
 
-    # ---- Subset para treino rápido ----------------------------------------
+    # * ---- Subset para treino rápido -------------------------------------
     if args.frac < 1.0:
         pairs = pairs.sample(frac=args.frac, random_state=settings.random_seed)
         logger.info("Usando %.0f%% dos dados = %d pares", args.frac * 100, len(pairs))
 
-    # ---- Split triplo: treino / validação / teste -------------------------
+    # * ---- Split triplo: treino / validação / teste ----------------------
     dataset = InteractionDataset(pairs)
-    train_idx, val_idx, test_idx = _split_train_val_test(
+    train_idx, val_idx, test_idx = split_train_val_test(
         len(dataset),
         settings.validation_split,
         settings.test_split,
@@ -364,23 +319,16 @@ def main() -> None:
         len(test_idx),
     )
 
-    # ---- Salvar test set para avaliação futura (Card 3) -------------------
-    processed_dir = Path(settings.data_processed_dir)
+    # * ---- Persistir splits para os stages seguintes ---------------------
     processed_dir.mkdir(parents=True, exist_ok=True)
-    test_pairs = pairs.iloc[test_idx].copy()
-    test_pairs.to_parquet(processed_dir / "test_pairs.parquet", index=False)
-    logger.info(
-        "Test set salvo em %s (%d pares)",
-        processed_dir / "test_pairs.parquet",
-        len(test_pairs),
-    )
+    _save_split_pairs(pairs, train_idx, test_idx, processed_dir)
 
-    # ---- DataLoaders ------------------------------------------------------
+    # * ---- DataLoaders ---------------------------------------------------
     train_loader, val_loader = _build_dataloaders(
         dataset, train_idx, val_idx, settings.batch_size
     )
 
-    # ---- Modelo -----------------------------------------------------------
+    # * ---- Modelo --------------------------------------------------------
     model_cfg = cfg["model"]
     train_cfg = cfg["training"]
     epochs = args.epochs if args.epochs is not None else train_cfg["max_epochs"]
@@ -388,8 +336,8 @@ def main() -> None:
 
     model = ModelFactory.create(
         model_cfg["type"],
-        n_users=len(strategy.user_to_idx),
-        n_items=len(strategy.item_to_idx),
+        n_users=len(user_to_idx),
+        n_items=len(item_to_idx),
         embedding_dim=model_cfg.get("embedding_dim", 64),
         hidden_dims=hidden_dims,
         dropout=model_cfg.get("dropout", 0.3),
@@ -404,7 +352,7 @@ def main() -> None:
         total_params,
     )
 
-    # ---- Treino (com MLflow tracking) -------------------------------------
+    # * ---- Treino (com MLflow tracking) ----------------------------------
     pos_weight = train_cfg.get("pos_weight")
     pos_weight_tensor = (
         torch.tensor([pos_weight], device=device) if pos_weight else None
@@ -414,16 +362,14 @@ def main() -> None:
         run_id = run.info.run_id
         logger.info("MLflow run: %s", run_id)
 
-        # Tags do config.yaml
         mlflow_tags = cfg.get("mlflow", {}).get("tags", {})
         mlflow.set_tags(mlflow_tags)
 
-        # Loga parâmetros do modelo e treino
         mlflow.log_params(
             {
                 "model_type": model_cfg["type"],
-                "n_users": len(strategy.user_to_idx),
-                "n_items": len(strategy.item_to_idx),
+                "n_users": len(user_to_idx),
+                "n_items": len(item_to_idx),
                 "embedding_dim": model_cfg.get("embedding_dim", 64),
                 "hidden_dims": str(hidden_dims),
                 "dropout": model_cfg.get("dropout", 0.3),
@@ -462,7 +408,6 @@ def main() -> None:
         )
         elapsed = time.perf_counter() - t0
 
-        # Loga métricas finais
         mlflow.log_metrics(
             {
                 "best_val_loss": float(val_losses[best_epoch - 1]),
@@ -481,17 +426,17 @@ def main() -> None:
             best_epoch,
         )
 
-        # ---- Salvamento ---------------------------------------------------
+        # * ---- Salvamento ------------------------------------------------
         models_dir = Path("models")
         models_dir.mkdir(exist_ok=True)
         checkpoint = {
             "model_state_dict": model.state_dict(),
-            "n_users": len(strategy.user_to_idx),
-            "n_items": len(strategy.item_to_idx),
+            "n_users": len(user_to_idx),
+            "n_items": len(item_to_idx),
             "embedding_dim": model_cfg.get("embedding_dim", 64),
             "hidden_dims": hidden_dims,
-            "user_to_idx": strategy.user_to_idx,
-            "item_to_idx": strategy.item_to_idx,
+            "user_to_idx": user_to_idx,
+            "item_to_idx": item_to_idx,
             "seed": settings.random_seed,
             "train_losses": train_losses,
             "val_losses": val_losses,
@@ -501,8 +446,6 @@ def main() -> None:
         torch.save(checkpoint, models_dir / "model.pt")
         logger.info("Checkpoint salvo em models/model.pt")
 
-        # Loga modelo como artefato no MLflow (para registro futuro)
-        # Usa pickle (torch.save) em vez do pt2 default que exige TensorSpec.
         sample_user = torch.tensor([0])
         sample_item = torch.tensor([0])
         mlflow.pytorch.log_model(

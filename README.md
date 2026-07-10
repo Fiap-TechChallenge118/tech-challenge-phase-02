@@ -237,7 +237,7 @@ Edite o `.env` gerado com seus valores locais antes de continuar.
 ### 2. Baixar os dados versionados pelo DVC
 
 ```bash
-dvc pull
+make dvc-pull
 ```
 
 > Se o remote DVC não estiver configurado, copie os arquivos brutos do Instacart para `data/raw/` manualmente.
@@ -297,14 +297,16 @@ Se o script encerrar com erro, a mensagem indica exatamente o que falta corrigir
 ### 4. Reproduzir o pipeline completo
 
 ```bash
-dvc repro
+make repro
 ```
 
 Executa os stages em ordem:
 1. `preprocess` — limpeza e divisão dos dados brutos
-2. `feature_eng` — construção das features de usuário e item
-3. `train` — treino do modelo PyTorch com early stopping
-4. `evaluate` — cálculo de métricas e comparação com baselines
+2. `train` — treino do modelo PyTorch com early stopping
+3. `evaluate` — cálculo de métricas e comparação com baselines
+4. `register` — registro e promoção do modelo no MLflow Registry
+
+> Para executar um stage isolado: `make preprocess`, `make train`, `make evaluate` ou `make register`.
 
 ### 5. Executar os testes
 
@@ -315,7 +317,7 @@ make test
 ### 6. Visualizar experimentos no MLflow
 
 ```bash
-docker compose up mlflow
+make mlflow-ui
 # Acesse http://localhost:5000
 ```
 
@@ -330,36 +332,114 @@ docker compose up --build
 ## Pipeline DVC
 
 ```
-preprocess → feature_eng → train → evaluate
+preprocess → train → evaluate → register
 ```
 
 | Stage | Entrada | Saída |
 |---|---|---|
 | `preprocess` | `data/raw/*.csv` | `data/processed/interactions.parquet` |
-| `feature_eng` | `data/processed/interactions.parquet` | `data/processed/features.parquet` |
-| `train` | `data/processed/features.parquet` | `models/model.pt`, `models/encoders.pkl` |
+| `train` | `data/processed/interactions.parquet` | `models/model.pt`, `data/processed/test_pairs.parquet` |
 | `evaluate` | `models/model.pt`, dados de teste | `metrics/evaluation.json` |
+| `register` | `models/model.pt`, `metrics/evaluation.json` | modelo promovido no MLflow Registry |
 
 ---
 
 ## Qualidade de Código
 
 ```bash
-# Verificar linting
-make lint
+make lint          # verifica erros sem corrigir
+make lint-fix      # corrige automaticamente
+make format        # formata o código
+make test          # executa os testes unitários
+make check         # lint + format check combinados (usado no CI)
+```
 
-# Corrigir automaticamente
-make lint-fix
+Para rodar todos os hooks manualmente:
 
-# Formatar código
-make format
-
-# Executar testes
-make test
-
-# Rodar todos os hooks manualmente
+```bash
 pre-commit run --all-files
 ```
+
+Consulte a [Referência de Comandos](#referência-de-comandos-make) para a lista completa.
+
+---
+
+## Referência de Comandos (`make`)
+
+Execute `make` ou `make help` para listar todos os comandos disponíveis com suas descrições.
+
+### Ambiente
+
+| Comando | Descrição |
+|---|---|
+| `make setup` | Configura o ambiente do zero — instala dependências, cria `.env`. Rodar uma vez ao clonar. |
+| `make install` | Instala/atualiza dependências via `uv sync`. |
+| `make validate` | Valida o ambiente: Python, variáveis de ambiente, imports e diretórios. |
+
+### Qualidade de Código
+
+| Comando | Descrição |
+|---|---|
+| `make lint` | Verifica erros de linting sem corrigir. |
+| `make lint-fix` | Corrige erros de linting automaticamente. |
+| `make format` | Formata o código. |
+| `make check` | Lint + format check combinados (usado no CI). |
+
+### Testes
+
+| Comando | Descrição |
+|---|---|
+| `make test` | Executa todos os testes unitários. |
+| `make test-cov` | Executa testes com relatório de cobertura. |
+| `make test-integration` | Executa testes de integração (requer artefatos do DVC). |
+
+### CI
+
+| Comando | Descrição |
+|---|---|
+| `make ci` | Sequência completa do CI: `check` + `test` + `dvc-dag`. |
+
+### Pipeline DVC
+
+| Comando | Descrição |
+|---|---|
+| `make repro` | Reproduz o pipeline DVC completo (`preprocess → train → evaluate → register`). |
+| `make preprocess` | Executa apenas o stage de pré-processamento. |
+| `make train` | Executa apenas o stage de treino. |
+| `make evaluate` | Executa apenas o stage de avaliação. |
+| `make register` | Executa apenas o stage de registro no MLflow Model Registry. |
+
+### DVC — Dados e Versionamento
+
+Os comandos `dvc-pull` e `dvc-push` aceitam o argumento `ARGS` para especificar quais artefatos operar.
+Arquivos rastreados via `dvc add` (ex: `data/raw`) usam o arquivo `.dvc` como referência; outputs de stages usam o caminho direto.
+
+```bash
+# Baixar todos os artefatos
+make dvc-pull
+
+# Baixar apenas os dados brutos
+make dvc-pull ARGS="data/raw.dvc"
+
+# Baixar dados processados e modelos
+make dvc-pull ARGS="data/processed models"
+
+# Enviar artefatos para o remote
+make dvc-push ARGS="data/raw.dvc"
+```
+
+| Comando | Descrição |
+|---|---|
+| `make dvc-pull [ARGS=...]` | Baixa artefatos do remote DVC. |
+| `make dvc-push [ARGS=...]` | Envia artefatos para o remote DVC. |
+| `make dvc-status` | Exibe o status do pipeline e dos dados rastreados. |
+| `make dvc-dag` | Exibe o grafo de dependências do pipeline no terminal. |
+
+### MLflow
+
+| Comando | Descrição |
+|---|---|
+| `make mlflow-ui` | Sobe a UI do MLflow em `http://localhost:5000`. |
 
 ---
 

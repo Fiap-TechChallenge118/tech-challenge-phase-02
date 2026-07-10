@@ -318,7 +318,7 @@ class TestMainExitCodes:
             env_values: dict[str, str] = {
                 "PROJECT_NAME": "tech-challenge-02",
                 "ENV": "development",
-                "MLFLOW_TRACKING_URI": "http://localhost:5000",
+                "MLFLOW_TRACKING_URI": "sqlite:///mlflow.db",
                 "MLFLOW_EXPERIMENT_NAME": "recommendation-system",
                 "MLFLOW_REGISTERED_MODEL_NAME": "recommender-mlp",
                 "DVC_REMOTE_TYPE": "local",

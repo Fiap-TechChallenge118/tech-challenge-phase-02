@@ -167,20 +167,19 @@ generalização.
 
 ```bash
 # 1. Setup do ambiente
-git clone <repo-url> && cd tech-challenge-phase-02
+git clone https://github.com/Fiap-TechChallenge118/tech-challenge-phase-02.git
+cd tech-challenge-phase-02
 uv sync
 
-# 2. Baixar dados
-uv run python scripts/download_dataset.py
+# 2. Baixar dados versionados pelo DVC
+make dvc-pull
 
-# 3. Treinar com MLflow tracking
-uv run python -m src.training.trainer --frac 0.2 --epochs 50
+# 3. Reproduzir o pipeline completo (preprocess → feature_eng → train → evaluate → register)
+make repro
 
-# 4. Avaliar vs baselines
-uv run python -m src.training.evaluate --max-users 5000
-
-# 5. Promover para Production
-uv run python -m src.training.register
+# 4. Visualizar experimentos no MLflow
+make mlflow-ui
+# Acesse http://localhost:5000
 ```
 
 ---

@@ -1,6 +1,6 @@
 # Tech Challenge — Fase 02
 
-![CI](https://github.com/<seu-usuario>/tech-challenge-phase-02/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/Fiap-TechChallenge118/tech-challenge-phase-02/actions/workflows/ci.yml/badge.svg)
 
 > Sistema de Recomendação de Produtos com Rede Neural (MLP/Embedding-based) + Pipeline MLOps End-to-End.
 
@@ -301,10 +301,11 @@ make repro
 ```
 
 Executa os stages em ordem:
-1. `preprocess` — limpeza e divisão dos dados brutos
-2. `train` — treino do modelo PyTorch com early stopping
-3. `evaluate` — cálculo de métricas e comparação com baselines
-4. `register` — registro e promoção do modelo no MLflow Registry
+1. `preprocess` — limpeza dos dados brutos e geração de pares usuário-produto
+2. `feature_eng` — divisão em treino/validação/teste com seed fixa
+3. `train` — treino do modelo PyTorch com early stopping
+4. `evaluate` — cálculo de métricas e comparação com baselines
+5. `register` — registro e promoção do modelo no MLflow Registry
 
 > Para executar um stage isolado: `make preprocess`, `make train`, `make evaluate` ou `make register`.
 
@@ -332,14 +333,15 @@ docker compose up --build
 ## Pipeline DVC
 
 ```
-preprocess → train → evaluate → register
+preprocess → feature_eng → train → evaluate → register
 ```
 
 | Stage | Entrada | Saída |
 |---|---|---|
-| `preprocess` | `data/raw/*.csv` | `data/processed/interactions.parquet` |
-| `train` | `data/processed/interactions.parquet` | `models/model.pt`, `data/processed/test_pairs.parquet` |
-| `evaluate` | `models/model.pt`, dados de teste | `metrics/evaluation.json` |
+| `preprocess` | `data/raw/*.csv` | `data/processed/interactions.parquet`, `mappings.json` |
+| `feature_eng` | `data/processed/interactions.parquet` | `train_pairs.parquet`, `val_pairs.parquet`, `test_pairs.parquet` |
+| `train` | `train_pairs.parquet`, `val_pairs.parquet` | `models/model.pt` |
+| `evaluate` | `models/model.pt`, `test_pairs.parquet` | `metrics/evaluation.json` |
 | `register` | `models/model.pt`, `metrics/evaluation.json` | modelo promovido no MLflow Registry |
 
 ---
@@ -403,7 +405,7 @@ Execute `make` ou `make help` para listar todos os comandos disponíveis com sua
 
 | Comando | Descrição |
 |---|---|
-| `make repro` | Reproduz o pipeline DVC completo (`preprocess → train → evaluate → register`). |
+| `make repro` | Reproduz o pipeline DVC completo (`preprocess → feature_eng → train → evaluate → register`). |
 | `make preprocess` | Executa apenas o stage de pré-processamento. |
 | `make train` | Executa apenas o stage de treino. |
 | `make evaluate` | Executa apenas o stage de avaliação. |

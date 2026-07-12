@@ -7,7 +7,8 @@ aplica fração opcional e divide em três splits com seed fixa:
 - ``data/processed/val_pairs.parquet``   — pares de validação (early stopping)
 - ``data/processed/test_pairs.parquet``  — pares de teste (holdout final)
 
-Os splits são consumidos pelo stage ``train`` (train + val) e ``evaluate`` (test + train).
+Os splits são consumidos pelo stage ``train`` (train + val)
+e ``evaluate`` (test + train).
 O contrato de colunas é: ``user_idx``, ``item_idx``, ``label`` (int64, int64, float32).
 
 Uso::

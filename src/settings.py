@@ -188,9 +188,10 @@ class Settings(BaseSettings):
     # * -----------------------------------------------------------------------
 
     mlflow_tracking_uri: str = Field(
-        default="sqlite:///mlflow.db",
-        description="URI do servidor de tracking do MLflow "
-        "(sqlite:/// suporta Registry sem servidor).",
+        default="http://localhost:5000",
+        description="URI do servidor de tracking do MLflow. "
+        "Com docker compose: http://localhost:5000. "
+        "Sem servidor (fallback local): sqlite:///mlflow.db.",
     )
 
     mlflow_experiment_name: str = Field(

@@ -1,0 +1,92 @@
+# =============================================================================
+# docker-compose.yml — Tech Challenge 02
+#
+# Serviços:
+#   mlflow  : MLflow Tracking Server (UI em http://localhost:5000)
+#   trainer : Executa o pipeline DVC completo (dvc repro)
+#
+# Uso:
+#   # Subir MLflow server
+#   docker compose up mlflow
+#
+#   # Subir MLflow + rodar treino completo
+#   docker compose up
+#
+#   # Rodar apenas o treino (MLflow já no ar)
+#   docker compose run --rm trainer
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # MLflow Tracking Server
+  # Expõe a UI em http://localhost:5000
+  # Artefatos e banco de dados ficam em volumes persistentes.
+  # ---------------------------------------------------------------------------
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.12.2
+    container_name: tc02-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlruns:/mlflow/mlruns
+      - mlartifacts:/mlflow/mlartifacts
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:////mlflow/mlruns/mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/mlartifacts
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlruns/mlflow.db
+      --default-artifact-root /mlflow/mlartifacts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Trainer — executa o pipeline DVC completo
+  # Depende do MLflow estar saudável antes de iniciar.
+  # Dados e modelos são montados via volumes para persistência entre runs.
+  # ---------------------------------------------------------------------------
+  trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: tc02-trainer
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./metrics:/app/metrics
+      - mlruns:/mlflow/mlruns
+      - mlartifacts:/mlflow/mlartifacts
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_EXPERIMENT_NAME=recommendation-system
+      - MLFLOW_REGISTERED_MODEL_NAME=recommender-mlp
+      - RANDOM_SEED=42
+      - DATA_RAW_DIR=data/raw
+      - DATA_PROCESSED_DIR=data/processed
+      - PYTHONPATH=/app
+    env_file:
+      - .env
+    command: >
+      sh -c "
+        python -m src.data.preprocess &&
+        python -m src.features.feature_eng --frac 0.2 &&
+        python -m src.training.trainer &&
+        python -m src.training.evaluate &&
+        python -m src.training.register
+      "
+
+volumes:
+  mlruns:
+    driver: local
+  mlartifacts:
+    driver: local

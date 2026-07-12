@@ -2,24 +2,21 @@
 
 Módulo executável que orquestra o treino ponta a ponta:
 
-1. Carrega ``data/processed/interactions.parquet`` (produzido pelo stage preprocess)
+1. Carrega ``data/processed/train_pairs.parquet`` e ``val_pairs.parquet``
+   (produzidos pelo stage feature_eng)
 2. Carrega ``data/processed/mappings.json`` (user_to_idx / item_to_idx)
-3. Divide em treino (80%) / validação (10%) / teste (10%)
-4. Instancia ``RecommendationMLP`` via ``ModelFactory``
-5. Treina com ``BCEWithLogitsLoss`` + ``Adam``
-6. Loga parâmetros, métricas e artefatos no MLflow Tracking
-7. Salva checkpoint + train_pairs.parquet + test_pairs.parquet para avaliação futura
+3. Instancia ``RecommendationMLP`` via ``ModelFactory``
+4. Treina com ``BCEWithLogitsLoss`` + ``Adam``
+5. Loga parâmetros, métricas e artefatos no MLflow Tracking
+6. Salva checkpoint ``models/model.pt`` para o stage evaluate
 
 Uso::
 
-    # Treino padrão (20% dos dados, 10 épocas)
+    # Treino padrão (splits gerados pelo stage feature_eng)
     uv run python -m src.training.trainer
 
-    # Treino completo (100% dos dados, 50 épocas)
-    uv run python -m src.training.trainer --frac 1.0
-
-    # Ajustar fração e épocas
-    uv run python -m src.training.trainer --frac 0.3 --epochs 15
+    # Ajustar número de épocas
+    uv run python -m src.training.trainer --epochs 20
 """
 
 import argparse
@@ -38,7 +35,7 @@ from torch.utils.data import DataLoader
 from src.models.factory import ModelFactory
 from src.settings import get_settings
 from src.training.dataset import InteractionDataset
-from src.training.io import load_config, load_mappings, load_pairs, split_train_val_test
+from src.training.io import load_config, load_mappings, load_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -179,18 +176,16 @@ def train(
 
 
 def _build_dataloaders(
-    dataset: InteractionDataset,
-    train_idx: np.ndarray,
-    val_idx: np.ndarray,
+    train_pairs,
+    val_pairs,
     batch_size: int,
     num_workers: int = 4,
 ) -> tuple[DataLoader, DataLoader]:
-    """Cria DataLoaders de treino e validação a partir de índices pré-calculados.
+    """Cria DataLoaders de treino e validação a partir dos splits do feature_eng.
 
     Args:
-        dataset: Dataset com todos os pares rotulados.
-        train_idx: Índices de treino.
-        val_idx: Índices de validação.
+        train_pairs: DataFrame de pares de treino.
+        val_pairs: DataFrame de pares de validação.
         batch_size: Tamanho do batch.
         num_workers: Workers para carregamento paralelo.
 
@@ -199,7 +194,7 @@ def _build_dataloaders(
     """
     pin_memory = torch.cuda.is_available()
     train_loader = DataLoader(
-        torch.utils.data.Subset(dataset, train_idx.tolist()),
+        InteractionDataset(train_pairs),
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
@@ -207,7 +202,7 @@ def _build_dataloaders(
         persistent_workers=num_workers > 0,
     )
     val_loader = DataLoader(
-        torch.utils.data.Subset(dataset, val_idx.tolist()),
+        InteractionDataset(val_pairs),
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
@@ -217,46 +212,9 @@ def _build_dataloaders(
     return train_loader, val_loader
 
 
-def _save_split_pairs(
-    pairs,
-    train_idx: np.ndarray,
-    test_idx: np.ndarray,
-    processed_dir: Path,
-) -> None:
-    """Persiste os subsets de treino e teste como parquet para os stages seguintes.
-
-    Args:
-        pairs: DataFrame completo de pares.
-        train_idx: Índices do split de treino.
-        test_idx: Índices do split de teste.
-        processed_dir: Diretório de saída (``data/processed/``).
-    """
-    train_pairs = pairs.iloc[train_idx].copy()
-    train_pairs.to_parquet(processed_dir / "train_pairs.parquet", index=False)
-    logger.info(
-        "train_pairs.parquet salvo em %s (%d pares)",
-        processed_dir / "train_pairs.parquet",
-        len(train_pairs),
-    )
-
-    test_pairs = pairs.iloc[test_idx].copy()
-    test_pairs.to_parquet(processed_dir / "test_pairs.parquet", index=False)
-    logger.info(
-        "test_pairs.parquet salvo em %s (%d pares)",
-        processed_dir / "test_pairs.parquet",
-        len(test_pairs),
-    )
-
-
 def main() -> None:
     """Ponto de entrada do script de treino."""
     parser = argparse.ArgumentParser(description="Treinar MLP de recomendação.")
-    parser.add_argument(
-        "--frac",
-        type=float,
-        default=0.2,
-        help="Fração dos dados a usar (default: 0.2 = 20%%).",
-    )
     parser.add_argument(
         "--epochs",
         type=int,
@@ -288,44 +246,23 @@ def main() -> None:
         settings.mlflow_experiment_name,
     )
 
-    # * ---- Carregar dados processados (sem reprocessar CSVs brutos) ------
+    # * ---- Carregar splits produzidos pelo stage feature_eng --------------
     processed_dir = Path(settings.data_processed_dir)
-    pairs = load_pairs(processed_dir / "interactions.parquet")
+    train_pairs = load_pairs(processed_dir / "train_pairs.parquet")
+    val_pairs = load_pairs(processed_dir / "val_pairs.parquet")
     user_to_idx, item_to_idx = load_mappings(processed_dir / "mappings.json")
+
     logger.info(
-        "Dados carregados: %d pares (usuários=%d, itens=%d)",
-        len(pairs),
+        "Dados carregados: treino=%d | val=%d | usuários=%d | itens=%d",
+        len(train_pairs),
+        len(val_pairs),
         len(user_to_idx),
         len(item_to_idx),
     )
 
-    # * ---- Subset para treino rápido -------------------------------------
-    if args.frac < 1.0:
-        pairs = pairs.sample(frac=args.frac, random_state=settings.random_seed)
-        logger.info("Usando %.0f%% dos dados = %d pares", args.frac * 100, len(pairs))
-
-    # * ---- Split triplo: treino / validação / teste ----------------------
-    dataset = InteractionDataset(pairs)
-    train_idx, val_idx, test_idx = split_train_val_test(
-        len(dataset),
-        settings.validation_split,
-        settings.test_split,
-        settings.random_seed,
-    )
-    logger.info(
-        "Split: %d treino / %d validação / %d teste (holdout)",
-        len(train_idx),
-        len(val_idx),
-        len(test_idx),
-    )
-
-    # * ---- Persistir splits para os stages seguintes ---------------------
-    processed_dir.mkdir(parents=True, exist_ok=True)
-    _save_split_pairs(pairs, train_idx, test_idx, processed_dir)
-
     # * ---- DataLoaders ---------------------------------------------------
     train_loader, val_loader = _build_dataloaders(
-        dataset, train_idx, val_idx, settings.batch_size
+        train_pairs, val_pairs, settings.batch_size
     )
 
     # * ---- Modelo --------------------------------------------------------
@@ -383,13 +320,12 @@ def main() -> None:
                 "patience": train_cfg.get("patience", 5),
                 "min_delta": train_cfg.get("min_delta", 1e-4),
                 "pos_weight": pos_weight,
-                "data_frac": args.frac,
                 "random_seed": settings.random_seed,
                 "device": str(device),
             }
         )
-        mlflow.log_param("train_pairs", len(train_idx))
-        mlflow.log_param("val_pairs", len(val_idx))
+        mlflow.log_param("train_pairs", len(train_pairs))
+        mlflow.log_param("val_pairs", len(val_pairs))
 
         t0 = time.perf_counter()
         patience = train_cfg.get("patience", 5)

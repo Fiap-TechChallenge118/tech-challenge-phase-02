@@ -1,0 +1,15 @@
+# Copie para terraform.tfvars e ajuste conforme necessário.
+#   cp terraform.tfvars.example terraform.tfvars
+
+aws_region   = "us-east-1"
+service_name = "tc02-api"
+image_tag    = "latest"
+
+# Primeiro apply: false (cria só o ECR). Após push da imagem, mude para true.
+deploy_service = false
+
+# t3.micro é Free Tier (1 GB RAM + 2 GB de swap configurados no user_data).
+# Se a API sofrer OOM no startup, use "t3.small" (2 GB, ~US$ 15/mês).
+instance_type = "t3.micro"
+
+api_port = 8000

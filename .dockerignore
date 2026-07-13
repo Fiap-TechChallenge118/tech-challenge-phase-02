@@ -39,12 +39,16 @@ data/processed/
 # MODELOS E ARTEFATOS ML
 # =============================================================================
 
-# Pesos treinados — gerenciados pelo MLflow, não pertencem à imagem
+# Pesos treinados — gerenciados pelo MLflow, não pertencem à imagem de treino.
 models/
 *.pth
 *.pt
 *.pkl
 *.joblib
+
+# Exceção: o stage `api` embute o checkpoint promovido a Production para servir
+# o modelo sem depender do MLflow/DVC em runtime.
+!models/model.pt
 
 # =============================================================================
 # MLFLOW / DVC

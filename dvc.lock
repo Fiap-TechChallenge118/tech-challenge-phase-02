@@ -10,17 +10,17 @@ stages:
       nfiles: 6
     - path: src/data/preprocess.py
       hash: md5
-      md5: 6721e87d0282521f519802572be8bda0
-      size: 5301
+      md5: adad75468f4ace8812f2d4c0dc8cb44a
+      size: 5458
     - path: src/features/preprocessing/
       hash: md5
-      md5: 70b3825c71f537965592b8cee7846876.dir
-      size: 52198
+      md5: ff506530a18a9aa56dad8da660aa63ff.dir
+      size: 52390
       nfiles: 16
     - path: src/settings.py
       hash: md5
-      md5: 2b5fa1a0379057cb60a5011a36317246
-      size: 13854
+      md5: 3b2ce122e54894781de2a701dccdc08e
+      size: 14332
     outs:
     - path: data/processed/interactions.parquet
       hash: md5
@@ -30,3 +30,191 @@ stages:
       hash: md5
       md5: 05ceb783ae45b6dbcbe1ebf09e20b470
       size: 4262327
+  feature_eng:
+    cmd: uv run python -m src.features.feature_eng --frac 0.2
+    deps:
+    - path: data/processed/interactions.parquet
+      hash: md5
+      md5: f20418c177301ca8d1288774bfe3fc4e
+      size: 86205121
+    - path: data/processed/mappings.json
+      hash: md5
+      md5: 05ceb783ae45b6dbcbe1ebf09e20b470
+      size: 4262327
+    - path: src/features/feature_eng.py
+      hash: md5
+      md5: 348e3b4f8cfa3754f08f12b984ce8e13
+      size: 3422
+    - path: src/settings.py
+      hash: md5
+      md5: 3b2ce122e54894781de2a701dccdc08e
+      size: 14332
+    - path: src/training/io.py
+      hash: md5
+      md5: 9e9fef047990cf31b32e2d1fb2ae4968
+      size: 3993
+    params:
+      configs/config.yaml:
+        training.test_split: 0.1
+        training.validation_split: 0.1
+    outs:
+    - path: data/processed/test_pairs.parquet
+      hash: md5
+      md5: cd0cfe6b954c0d142026090c0a1f120b
+      size: 3840233
+    - path: data/processed/train_pairs.parquet
+      hash: md5
+      md5: 99a631167a36c9e4a77f06886a9424bb
+      size: 30649138
+    - path: data/processed/val_pairs.parquet
+      hash: md5
+      md5: 4ff51cf41c9405f9538d926e5ef40196
+      size: 3842628
+  train:
+    cmd: uv run python -m src.training.trainer
+    deps:
+    - path: configs/config.yaml
+      hash: md5
+      md5: 095a4a742848e7a2d25461ce99797a0f
+      size: 3342
+    - path: data/processed/mappings.json
+      hash: md5
+      md5: 05ceb783ae45b6dbcbe1ebf09e20b470
+      size: 4262327
+    - path: data/processed/train_pairs.parquet
+      hash: md5
+      md5: 99a631167a36c9e4a77f06886a9424bb
+      size: 30649138
+    - path: data/processed/val_pairs.parquet
+      hash: md5
+      md5: 4ff51cf41c9405f9538d926e5ef40196
+      size: 3842628
+    - path: src/models/factory.py
+      hash: md5
+      md5: 659510da9ec7d48b9cff4f168f0504a1
+      size: 1815
+    - path: src/models/mlp.py
+      hash: md5
+      md5: 6e12a08183a2318547b1020707c6d3aa
+      size: 4744
+    - path: src/settings.py
+      hash: md5
+      md5: 3b2ce122e54894781de2a701dccdc08e
+      size: 14332
+    - path: src/training/dataset.py
+      hash: md5
+      md5: 7953c811429dc279e1d18ed57ec37fcb
+      size: 1357
+    - path: src/training/io.py
+      hash: md5
+      md5: 9e9fef047990cf31b32e2d1fb2ae4968
+      size: 3993
+    - path: src/training/trainer.py
+      hash: md5
+      md5: 83b06d9f452a140cb7d1e554e9077263
+      size: 14220
+    params:
+      configs/config.yaml:
+        model.activation: relu
+        model.batch_norm: true
+        model.dropout: 0.3
+        model.embedding_dim: 64
+        model.hidden_dims:
+        - 256
+        - 128
+        - 64
+        training.batch_size: 1024
+        training.learning_rate: 0.001
+        training.max_epochs: 10
+        training.min_delta: 0.0001
+        training.patience: 5
+        training.weight_decay: 1e-05
+    outs:
+    - path: models/model.pt
+      hash: md5
+      md5: 990f049515f74a83154416b57a5702e1
+      size: 67917850
+  evaluate:
+    cmd: uv run python -m src.training.evaluate
+    deps:
+    - path: configs/config.yaml
+      hash: md5
+      md5: 095a4a742848e7a2d25461ce99797a0f
+      size: 3342
+    - path: data/processed/test_pairs.parquet
+      hash: md5
+      md5: cd0cfe6b954c0d142026090c0a1f120b
+      size: 3840233
+    - path: data/processed/train_pairs.parquet
+      hash: md5
+      md5: 99a631167a36c9e4a77f06886a9424bb
+      size: 30649138
+    - path: data/raw/order_products__prior.csv
+      hash: md5
+      md5: 8bca7ad1968ee8e07760b94db74461fb
+      size: 577550706
+    - path: data/raw/order_products__train.csv
+      hash: md5
+      md5: 5d8f7580855097e3644ea626ee430b75
+      size: 24680147
+    - path: data/raw/orders.csv
+      hash: md5
+      md5: dd0b2f4ee716409b8e79e7b1c611a0b8
+      size: 108968645
+    - path: models/model.pt
+      hash: md5
+      md5: 990f049515f74a83154416b57a5702e1
+      size: 67917850
+    - path: src/features/preprocessing/
+      hash: md5
+      md5: ff506530a18a9aa56dad8da660aa63ff.dir
+      size: 52390
+      nfiles: 16
+    - path: src/models/baselines.py
+      hash: md5
+      md5: ba9ef849b39ab8569cef1c799a9ac4c8
+      size: 5375
+    - path: src/models/mlp.py
+      hash: md5
+      md5: 6e12a08183a2318547b1020707c6d3aa
+      size: 4744
+    - path: src/settings.py
+      hash: md5
+      md5: 3b2ce122e54894781de2a701dccdc08e
+      size: 14332
+    - path: src/training/evaluate.py
+      hash: md5
+      md5: a4b4eda2bd25ce3ca1dd5a51b850c4c7
+      size: 11849
+    - path: src/training/io.py
+      hash: md5
+      md5: 9e9fef047990cf31b32e2d1fb2ae4968
+      size: 3993
+    - path: src/training/metrics.py
+      hash: md5
+      md5: 0e4e709db23cf3cdb675df03ffc6e038
+      size: 5071
+    outs:
+    - path: metrics/evaluation.json
+      hash: md5
+      md5: f2fd5e19929041f8b36b1343bf8a39c4
+      size: 707
+  register:
+    cmd: uv run python -m src.training.register
+    deps:
+    - path: metrics/evaluation.json
+      hash: md5
+      md5: f2fd5e19929041f8b36b1343bf8a39c4
+      size: 707
+    - path: models/model.pt
+      hash: md5
+      md5: 990f049515f74a83154416b57a5702e1
+      size: 67917850
+    - path: src/settings.py
+      hash: md5
+      md5: 3b2ce122e54894781de2a701dccdc08e
+      size: 14332
+    - path: src/training/register.py
+      hash: md5
+      md5: a2ab9505037c0a75c0e278088d3ffaa5
+      size: 7215

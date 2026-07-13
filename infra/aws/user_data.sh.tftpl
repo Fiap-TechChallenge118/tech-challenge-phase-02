@@ -1,0 +1,27 @@
+#!/bin/bash
+# Bootstrap da instância: Docker + swap + container da API a partir do ECR.
+# Executado uma única vez, no primeiro boot (cloud-init).
+set -euxo pipefail
+
+# --- Swap: a t3.micro tem 1 GB de RAM e o import do PyTorch é pesado ---------
+dd if=/dev/zero of=/swapfile bs=1M count=${swap_size_m}
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+# --- Docker ------------------------------------------------------------------
+dnf install -y docker
+systemctl enable --now docker
+
+# --- Login no ECR (via IAM instance profile, sem credenciais no disco) --------
+aws ecr get-login-password --region ${aws_region} \
+  | docker login --username AWS --password-stdin "$(echo ${ecr_image} | cut -d/ -f1)"
+
+# --- Sobe a API --------------------------------------------------------------
+docker pull ${ecr_image}
+docker run -d \
+  --name tc02-api \
+  --restart unless-stopped \
+  -p ${api_port}:8000 \
+  ${ecr_image}

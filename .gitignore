@@ -36,8 +36,11 @@ env/
 # uv.lock é MANTIDO no repositório para reproducibilidade (não ignorar)
 # uv.lock
 
-# Ruff Cache
+# Caches de ferramentas
 .ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # =============================================================================
 # DADOS
@@ -100,13 +103,19 @@ mlartifacts/
 # INFRAESTRUTURA (TERRAFORM)
 # =============================================================================
 
-# Diretório de plugins e providers do Terraform — baixados automaticamente
+# Diretório de plugins e providers do Terraform — baixados automaticamente (~686 MB)
 .terraform/
-.terraform.lock.hcl
 
-# State files — contêm o estado real da infraestrutura, podem conter segredos
+# .terraform.lock.hcl é MANTIDO no repositório: fixa as versões dos providers,
+# como o uv.lock faz para as dependências Python (não ignorar).
+
+# State files — contêm o estado real da infraestrutura (IDs, IPs, ARNs) e podem
+# conter segredos em texto plano
 *.tfstate
 *.tfstate.backup
+
+# Planos de execução — podem conter valores de variáveis sensíveis
+*.tfplan
 
 # Arquivo de variáveis reais — use terraform.tfvars.example como template
 terraform.tfvars

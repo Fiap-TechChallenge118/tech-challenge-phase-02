@@ -68,23 +68,50 @@ positivas), recomendando os top-10 itens para cada usuário.
 
 ### Resultados (@10)
 
+Modelo em Production (`recommender-mlp` v1): embedding 64, `pos_weight` desativado,
+early stopping na época 4 de 9 (`val_loss` 0,3164).
+
 | Modelo | Precision | Recall | NDCG | MAP |
 |---|---|---|---|---|
 | **Popularity** | **0,0084** | **0,0425** | **0,0244** | **0,0139** |
-| MLP (PyTorch) | 0,0009 | 0,0042 | 0,0022 | 0,0010 |
+| MLP (PyTorch) | 0,0077 | 0,0386 | 0,0228 | 0,0133 |
 | Sklearn (LogReg) | 0,0006 | 0,0023 | 0,0011 | 0,0004 |
+
+### Experimentos rastreados no MLflow
+
+Três runs testaram se o desempenho da MLP era limitado por capacidade ou por
+hiperparâmetros. **Nenhum superou o baseline de popularidade**:
+
+| Run | Configuração | Precision | Recall | NDCG | MAP |
+|---|---|---|---|---|---|
+| `6c7e83e5` | embedding 64 (**Production**) | 0,0077 | 0,0386 | **0,0228** | **0,0133** |
+| `978b2221` | embedding 128, lr 0,001 | 0,0079 | 0,0397 | 0,0219 | 0,0123 |
+| `6d122ac4` | `pos_weight` 3,0 | **0,0080** | **0,0404** | 0,0228 | 0,0127 |
+
+Dobrar o embedding (16,4M → 32,8M parâmetros) e reponderar a classe positiva melhoram
+Precision/Recall na terceira casa decimal, mas pioram ou empatam NDCG/MAP — o modelo
+acerta um pouco mais de itens e os ordena um pouco pior. A v1 foi mantida em Production
+por ter o melhor NDCG e MAP (as métricas sensíveis à ordem, que é o que importa em
+ranqueamento) com metade dos parâmetros.
 
 ### Interpretação
 
-- **Popularity** lidera: recomendar os itens mais comprados globalmente é
-  surpreendentemente eficaz para datasets de mercado com forte concentração
-  de compras em poucos produtos.
-- **MLP supera Sklearn em ~2-3×**: as embeddings latentes capturam sinal de
-  preferência que features agregadas por usuário (LogReg) não conseguem
-  modelar.
-- **Valores absolutos baixos**: o catálogo tem ~50 mil itens e recomendar
-  apenas 10 é inerentemente difícil. Além disso, o modelo foi treinado em só
-  20% dos dados para viabilizar iterações rápidas durante o desenvolvimento.
+- **MLP supera Sklearn em >12×**: as embeddings latentes capturam sinal de preferência
+  que features agregadas por usuário (LogReg) não conseguem modelar.
+- **Popularity ainda lidera (~5–9% acima da MLP)**: em cesta de supermercado, poucos
+  itens (banana, leite, ovos) aparecem em grande parte dos pedidos, o que torna a
+  recomendação não-personalizada um adversário forte.
+- **A causa é estrutural, não de tuning.** O modelo é treinado como *classificador
+  binário* (BCE com 1 negativo amostrado por positivo), mas é avaliado como *ranqueador*
+  sobre ~50 mil itens. Otimizar a probabilidade de um par (usuário, item) ser positivo
+  não é o mesmo que otimizar a ordem relativa do catálogo inteiro — e os três
+  experimentos acima confirmam que mexer na arquitetura não fecha essa lacuna.
+- **Caminhos de melhoria** (fora do escopo desta entrega): aumentar a razão de negativos
+  por positivo (1:4 ou 1:8), trocar a loss por uma de ranqueamento (BPR ou sampled
+  softmax) e treinar sobre 100% das interações em vez de 20%.
+- **Valores absolutos baixos são esperados**: recomendar 10 itens acertados dentro de um
+  catálogo de ~50 mil é inerentemente difícil; o que importa é a comparação relativa
+  entre modelos sob o mesmo protocolo.
 
 ---
 
@@ -118,10 +145,12 @@ estação, lançamentos de produtos ou alterações no comportamento do
 consumidor não são capturadas. O modelo deve ser retreinado periodicamente.
 
 ### Treino parcial (20%)
-Os resultados atuais refletem treino com apenas 20% dos dados. Um treino
-completo (100%) deve melhorar as métricas da MLP e possivelmente ultrapassar
-a Popularity, já que a MLP tem capacidade de aprender preferências
-personalizadas que a baseline de popularidade ignora.
+Os resultados atuais refletem treino com 20% das interações (5,5M de 27,7M pares),
+para viabilizar iterações rápidas. Um treino completo tende a melhorar as métricas,
+mas os experimentos registrados no MLflow indicam que **volume de dados e capacidade
+do modelo não são o gargalo principal**: dobrar os parâmetros não aproximou a MLP da
+Popularity. A limitação dominante é o objetivo de treino (classificação binária) não
+corresponder à tarefa de avaliação (ranqueamento) — ver seção 2.
 
 ### Ausência de features de conteúdo
 O modelo usa apenas interações passadas (filtragem colaborativa pura).

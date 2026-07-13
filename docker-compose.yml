@@ -24,7 +24,9 @@ services:
   # Artefatos e banco de dados ficam em volumes persistentes.
   # ---------------------------------------------------------------------------
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.12.2
+    # Deve acompanhar a major do cliente MLflow em pyproject.toml — o cliente 3.x
+    # usa endpoints (/api/2.0/mlflow/logged-models) que não existem no servidor 2.x.
+    image: ghcr.io/mlflow/mlflow:v3.14.0
     container_name: tc02-mlflow
     ports:
       - "5000:5000"
@@ -40,11 +42,17 @@ services:
       --port 5000
       --backend-store-uri sqlite:////mlflow/mlruns/mlflow.db
       --default-artifact-root /mlflow/mlartifacts
+    # A imagem oficial do MLflow não traz curl/wget — o healthcheck usa o Python do próprio container.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://localhost:5000/health")
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
   # ---------------------------------------------------------------------------
   # Trainer — executa o pipeline DVC completo

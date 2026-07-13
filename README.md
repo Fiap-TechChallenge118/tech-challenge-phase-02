@@ -255,13 +255,36 @@ make setup
 
 Edite o `.env` gerado com seus valores locais antes de continuar.
 
-### 2. Baixar os dados versionados pelo DVC
+### 2. Obter os dados
+
+O Instacart é um **dataset público do Kaggle**. Baixe os CSVs brutos para `data/raw/`:
 
 ```bash
+make download-data
+```
+
+Isso é tudo que o pipeline precisa — **nenhuma credencial AWS é necessária** para
+reproduzir o projeto do zero. Siga direto para o passo 3.
+
+<details>
+<summary>Integrantes do time: recuperar os artefatos já processados (opcional)</summary>
+
+Quem tem acesso ao remote DVC pode pular o reprocessamento e baixar dados tratados,
+modelo treinado e métricas direto do S3:
+
+```bash
+export AWS_PROFILE=tc02   # perfil com as credenciais do remote
 make dvc-pull
 ```
 
-> Se o remote DVC não estiver configurado, copie os arquivos brutos do Instacart para `data/raw/` manualmente.
+As credenciais são geradas por `infra/aws/iam_dvc.tf` (leitura/escrita apenas no
+prefixo do cache DVC) e entregues individualmente:
+
+```bash
+terraform -chdir=infra/aws output -json dvc_access_keys
+```
+
+</details>
 
 ### 3. Validar o ambiente
 
@@ -305,7 +328,7 @@ INFO    ✓ Settings válido — projeto 'tech-challenge-02' | env 'development'
 
 [5/5] Diretórios do projeto
 INFO    ✓ configs/ existe
-WARNING ⚠ data/raw não encontrado (rode dvc pull)
+WARNING ⚠ data/raw não encontrado (rode make download-data)
 ...
 
 INFO  ✓ Ambiente validado com sucesso! (N avisos, 0 erros)
@@ -313,7 +336,7 @@ INFO  ✓ Ambiente validado com sucesso! (N avisos, 0 erros)
 
 Se o script encerrar com erro, a mensagem indica exatamente o que falta corrigir antes de continuar.
 
-> Avisos em `[5/5]` sobre `data/` são esperados antes do `dvc pull` e não bloqueiam o ambiente.
+> Avisos em `[5/5]` sobre `data/` são esperados antes do download do dataset e não bloqueiam o ambiente.
 
 ### 4. Reproduzir o pipeline completo
 
@@ -364,9 +387,14 @@ preprocess → feature_eng → train → evaluate → register
 | `evaluate` | `models/model.pt`, `test_pairs.parquet` | `metrics/evaluation.json` |
 | `register` | `models/model.pt`, `metrics/evaluation.json` | modelo promovido a Production no MLflow Registry |
 
-Os dados e artefatos são versionados no remote S3 configurado em `.dvc/config`.
-Após clonar, `dvc pull` recupera tudo do cache e `dvc repro` reproduz o pipeline sem
-retreinar (os hashes do `dvc.lock` batem com os artefatos publicados).
+O pipeline parte de `data/raw/`, obtido do Kaggle com `make download-data`. A partir daí,
+`dvc repro` executa os cinco stages de ponta a ponta — **sem depender de nenhum serviço
+externo**.
+
+O remote S3 configurado em `.dvc/config` é um **cache versionado dos artefatos**, não a
+fonte dos dados: para quem tem acesso a ele, `dvc pull` recupera dados processados e
+modelo já treinados, e `dvc repro` revalida o pipeline sem retreinar (os hashes do
+`dvc.lock` batem com os artefatos publicados). É um atalho de tempo, não um pré-requisito.
 
 ---
 
@@ -412,8 +440,8 @@ docker build --target api -t tc02-api .
 docker run --rm -p 8000:8000 tc02-api
 ```
 
-Ambas expõem o Swagger em http://localhost:8000/docs. É necessário ter
-`models/model.pt` no diretório (recuperável com `dvc pull`).
+Ambas expõem o Swagger em http://localhost:8000/docs. É necessário ter `models/model.pt`
+no diretório — gerado por `make repro` ou, para quem tem acesso ao remote, `make dvc-pull`.
 
 Usuários fora do vocabulário do modelo retornam `404` — o modelo é colaborativo e não
 trata cold start (ver [Model Card](docs/model_card.md), seção 4).
@@ -514,7 +542,16 @@ Execute `make` ou `make help` para listar todos os comandos disponíveis com sua
 | `make evaluate` | Executa apenas o stage de avaliação. |
 | `make register` | Executa apenas o stage de registro no MLflow Model Registry. |
 
+### Dados Brutos
+
+| Comando | Descrição |
+|---|---|
+| `make download-data` | Baixa o dataset Instacart do Kaggle para `data/raw/`. Não requer AWS. |
+
 ### DVC — Dados e Versionamento
+
+> Requer credenciais do remote S3 — restrito ao time. Para reproduzir o projeto,
+> use `make download-data` + `make repro`.
 
 Os comandos `dvc-pull` e `dvc-push` aceitam o argumento `ARGS` para especificar quais artefatos operar.
 Arquivos rastreados via `dvc add` (ex: `data/raw`) usam o arquivo `.dvc` como referência; outputs de stages usam o caminho direto.

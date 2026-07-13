@@ -314,10 +314,9 @@ def _check_data_dirs(result: _ValidationResult) -> None:
         if path.exists():
             result.add_ok(f"{_c(label, _CYAN)} existe")
         else:
-            # ! Ausência de data/ é esperada antes do dvc pull — não é erro crítico
-            result.add_warning(
-                f"{_c(label, _CYAN)} não encontrado {_c('(rode dvc pull)', _DIM)}"
-            )
+            # ! Ausência de data/ é esperada antes do download — não é erro crítico
+            hint = _c("(rode make download-data)", _DIM)
+            result.add_warning(f"{_c(label, _CYAN)} não encontrado {hint}")
 
 
 # * ---------------------------------------------------------------------------

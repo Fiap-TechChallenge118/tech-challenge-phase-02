@@ -4,29 +4,35 @@ version = "0.1.0"
 description = "Tech Challenge 02 — Sistema de recomendação de produtos baseado em redes neurais (MLP/Embedding) com pipeline MLOps end-to-end."
 readme = "README.md"
 requires-python = ">=3.12"
+# Runtime da imagem de treino: apenas o que src/ importa de fato.
+# Ferramentas de exploração (Jupyter, plots) e de orquestração ficam nos grupos abaixo,
+# fora da imagem final via `uv sync --no-dev`.
 dependencies = [
     "torch>=2.2",
     "scikit-learn>=1.4",
     "scipy>=1.13",
-    "mlflow>=2.12",
-    "dvc>=3.0",
-    "dvc-s3>=3.0",
-    "fastapi>=0.111",
-    "uvicorn[standard]>=0.29",
+    # Cliente MLflow sem o servidor (Flask/SQLAlchemy/Alembic): o container apenas loga runs,
+    # quem serve a UI é a imagem oficial em docker-compose.yml.
+    # Faixa fechada na major 3: o servidor no compose precisa ser da mesma major.
+    "mlflow-skinny>=3.14,<4",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
     "pandas>=2.2",
     "numpy>=1.26",
+    # Engine de Parquet do pandas: o pipeline lê/escreve .parquet em todos os stages.
+    # Vinha transitivamente do mlflow completo — com mlflow-skinny precisa ser explícita.
+    "pyarrow>=15",
     "pandera>=0.19",
-    "joblib>=1.4",
-    "httpx>=0.27",
-    "ipykernel>=7.2.0",
-    "seaborn>=0.13",
     "pyyaml>=6.0",
-    "kagglehub>=1.0.2",
 ]
 
 [dependency-groups]
+# Servir o modelo (src/api) — instalado apenas no stage `api` do Dockerfile,
+# fora da imagem de treino.
+api = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+]
 dev = [
     "matplotlib>=3.11.0",
     "nbconvert>=7.17.1",
@@ -34,9 +40,20 @@ dev = [
     "ruff>=0.15.17",
     "pytest>=8.1",
     "pytest-cov>=5.0",
+    # MLflow completo (servidor + UI) para desenvolvimento local: `uv run mlflow ui`.
+    "mlflow>=3.14,<4",
+    # Orquestração do pipeline: roda no host e no CI, nunca dentro da imagem de treino.
+    "dvc>=3.0",
+    "dvc-s3>=3.0",
+    # Exploração e EDA (notebooks/01_eda.ipynb), não usados por src/.
     "seaborn>=0.13.2",
+    "ipykernel>=7.2.0",
+    # Usado apenas por scripts/download_dataset.py, executado fora do container.
+    "kagglehub>=1.0.2",
 ]
 
+# PyTorch CPU-only: o treino roda em CPU no container e no CI, e as wheels CUDA
+# adicionariam ~2GB à imagem sem uso.
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
 

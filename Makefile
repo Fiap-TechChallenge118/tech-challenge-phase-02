@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup install lint lint-fix format check test test-cov test-integration \
-        validate ci repro preprocess train evaluate register \
+        validate ci repro preprocess train evaluate register download-data \
         dvc-pull dvc-push dvc-status dvc-dag mlflow-ui
 
 DVC := uv run dvc
@@ -85,6 +85,14 @@ evaluate: ## Executa apenas o stage de avaliação
 
 register: ## Executa apenas o stage de registro no MLflow
 	$(DVC) repro register
+
+# -----------------------------------------------------------------------------
+# Dados brutos — caminho público, sem AWS
+# O Instacart é um dataset público do Kaggle: qualquer pessoa reproduz o pipeline
+# sem credencial do remote DVC.
+# -----------------------------------------------------------------------------
+download-data: ## Baixa o dataset Instacart do Kaggle para data/raw/
+	uv run python scripts/download_dataset.py
 
 # -----------------------------------------------------------------------------
 # DVC — dados e versionamento

@@ -24,6 +24,7 @@ import copy
 import logging
 import os
 import random
+import sys
 import time
 from pathlib import Path
 
@@ -227,6 +228,11 @@ def main() -> None:
         level=logging.INFO,
         format="%(levelname)-8s %(message)s",
     )
+
+    # O MLflow escreve emojis no stdout; consoles Windows em cp1252 abortam com
+    # UnicodeEncodeError sem isto.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     settings = get_settings()
     cfg = load_config(Path("configs/config.yaml"))

@@ -1,0 +1,104 @@
+# =============================================================================
+# GIT
+# =============================================================================
+
+.git/
+.gitignore
+
+# =============================================================================
+# PYTHON
+# =============================================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Ambientes virtuais — dependências são instaladas dentro do container
+.venv/
+venv/
+env/
+
+# Cache do uv e ruff — não necessários na imagem final
+.uv/
+.ruff_cache/
+
+# =============================================================================
+# DADOS — não copiar para o contexto de build
+# =============================================================================
+
+# Datasets brutos são grandes (>500MB) e versionados via DVC
+data/raw/
+
+# Dados processados são gerados em runtime pelo pipeline DVC
+data/processed/
+
+# =============================================================================
+# MODELOS E ARTEFATOS ML
+# =============================================================================
+
+# Pesos treinados — gerenciados pelo MLflow, não pertencem à imagem de treino.
+models/
+*.pth
+*.pt
+*.pkl
+*.joblib
+
+# Exceção: o stage `api` embute o checkpoint promovido a Production para servir
+# o modelo sem depender do MLflow/DVC em runtime.
+!models/model.pt
+
+# =============================================================================
+# MLFLOW / DVC
+# =============================================================================
+
+mlruns/
+mlartifacts/
+.dvc/cache/
+.dvc/tmp/
+
+# =============================================================================
+# SECRETS E CONFIGURAÇÕES LOCAIS
+# =============================================================================
+
+# NUNCA incluir o .env real na imagem — use variáveis de ambiente no runtime
+.env
+
+# =============================================================================
+# DESENVOLVIMENTO E CI
+# =============================================================================
+
+# Notebooks são ferramentas de exploração, não vão para produção
+notebooks/
+
+# Testes — não executados dentro da imagem de produção
+tests/
+
+# Documentação
+docs/
+*.md
+
+# Configurações de IDE
+.vscode/
+.idea/
+
+# Kiro (ferramenta de dev)
+.kiro/
+
+# Infraestrutura como código — não faz parte da imagem da aplicação
+infra/
+
+# GitHub Actions
+.github/
+
+# Lock file do uv — deps são instaladas com uv sync no Dockerfile
+# uv.lock é MANTIDO intencionalmente para reproducibilidade no build
+
+# =============================================================================
+# SISTEMA OPERACIONAL
+# =============================================================================
+
+.DS_Store
+Thumbs.db

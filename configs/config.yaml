@@ -1,0 +1,103 @@
+# =============================================================================
+# config.yaml — Hiperparâmetros e configurações do pipeline
+#
+# Valores sensíveis (URIs, credenciais, seeds) ficam no .env e são lidos via
+# Pydantic Settings. Este arquivo controla apenas a arquitetura e o pipeline.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Modelo
+# -----------------------------------------------------------------------------
+model:
+  # Tipo de modelo a instanciar via ModelFactory: mlp | embedding | baseline
+  type: mlp
+
+  # Dimensão dos vetores de embedding de usuário e item
+  embedding_dim: 64
+
+  # Unidades das camadas ocultas da MLP (em ordem)
+  hidden_dims: [256, 128, 64]
+
+  # Taxa de dropout aplicada após cada camada oculta
+  dropout: 0.3
+
+  # Função de ativação: relu | gelu | tanh
+  activation: relu
+
+  # Usar BatchNorm após cada camada linear
+  batch_norm: true
+
+# -----------------------------------------------------------------------------
+# Treinamento
+# -----------------------------------------------------------------------------
+training:
+  # Número máximo de épocas
+  max_epochs: 10
+
+  # Tamanho do batch
+  batch_size: 1024
+
+  # Taxa de aprendizado inicial
+  learning_rate: 0.001
+
+  # Weight decay (L2 regularization) no optimizer Adam
+  weight_decay: 0.00001
+
+  # Épocas sem melhora na val_loss para acionar early stopping
+  patience: 5
+
+  # Melhora mínima da val_loss para considerar progresso
+  min_delta: 0.0001
+
+  # Peso para classe positiva (interações esparsas). null = desativado
+  pos_weight: null
+
+  # Proporção do dataset reservada para validação
+  validation_split: 0.1
+
+  # Proporção do dataset reservada para teste
+  test_split: 0.1
+
+# -----------------------------------------------------------------------------
+# Dados
+# -----------------------------------------------------------------------------
+data:
+  # Nome do dataset: instacart
+  dataset_name: instacart
+
+  # Número mínimo de pedidos por usuário (filtro de cold-start)
+  min_user_interactions: 5
+
+  # Número mínimo de compras por produto (filtro de cauda longa)
+  min_item_interactions: 5
+
+  # Estratégia de pré-processamento a instanciar via PreprocessorFactory
+  # Opções: interaction_pairs | user_item_matrix | aggregated_features
+  strategy: interaction_pairs
+
+  # Número de negativos amostrados por par positivo (usado por interaction_pairs)
+  n_negatives: 1
+
+# -----------------------------------------------------------------------------
+# Avaliação
+# -----------------------------------------------------------------------------
+evaluation:
+  # K para Precision@K, Recall@K, NDCG@K e MAP@K
+  top_k: 10
+
+  # Métricas calculadas no stage evaluate
+  metrics:
+    - precision_at_k
+    - recall_at_k
+    - ndcg_at_k
+    - map_at_k
+
+# -----------------------------------------------------------------------------
+# MLflow
+# -----------------------------------------------------------------------------
+mlflow:
+  # Tags fixas adicionadas a todos os runs (complementam as variáveis do .env)
+  tags:
+    project: tech-challenge-02
+    framework: pytorch
+    task: recommendation

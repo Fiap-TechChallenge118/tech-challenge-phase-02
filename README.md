@@ -5,9 +5,19 @@
 [![Swagger](https://img.shields.io/badge/Swagger-%2Fdocs-85EA2D?logo=swagger&logoColor=black)](http://18.233.199.59:8000/docs)
 [![Deploy](https://img.shields.io/badge/deploy-EC2%20t3.micro%20%2B%20ECR-232F3E?logo=terraform&logoColor=white)](infra/aws)
 
-> Sistema de Recomendação de Produtos com Rede Neural (MLP/Embedding-based) + Pipeline MLOps End-to-End.
+Sistema de Recomendação de Produtos com Rede Neural (MLP/Embedding-based) + Pipeline MLOps End-to-End.
 
-**API de recomendação publicada:** http://18.233.199.59:8000/docs (Swagger UI)
+---
+
+> ### 🌐 API de recomendação publicada
+> **`http://18.233.199.59:8000/docs` (Swagger UI)**
+> [![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-AWS-brightgreen)](http://18.233.199.59:8000/docs)
+
+> ### 🎬 Vídeo STAR — Apresentação do Projeto
+> **`https://youtu.be/JX-qYcACK2Y?si=fZewsB3LAam6gKb4`**
+> [![Vídeo STAR](https://img.shields.io/badge/🎬_Vídeo_STAR-Apresentação-red?logo=youtube&logoColor=white)](https://youtu.be/JX-qYcACK2Y?si=fZewsB3LAam6gKb4)
+
+---
 
 ```bash
 curl "http://18.233.199.59:8000/recommend/1?k=5"
